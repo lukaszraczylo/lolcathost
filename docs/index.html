@@ -275,6 +275,14 @@
                 <div class="max-w-3xl mx-auto space-y-6">
                     <div class="glass p-6 rounded-xl">
                         <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <i class="fas fa-beer mr-2 text-amber-500"></i>
+                            Homebrew (macOS/Linux)
+                        </h3>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto"><code>brew install lukaszraczylo/brew-taps/lolcathost
+sudo lolcathost --install</code></pre>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
                             <i class="fas fa-download mr-2 text-pink-500"></i>
                             Quick Install
                         </h3>
@@ -300,7 +308,7 @@ sudo ./build/lolcathost --install</code></pre>
                             <li>Install the binary to <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/usr/local/bin/lolcathost</code></li>
                             <li>Create a LaunchDaemon (macOS) or systemd service (Linux)</li>
                             <li>Start the daemon automatically</li>
-                            <li>Create the default config at <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/.config/lolcathost/config.yaml</code></li>
+                            <li>Create the default config at <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/etc/lolcathost/config.yaml</code></li>
                         </ul>
                     </div>
                 </div>
@@ -417,7 +425,11 @@ sudo ./build/lolcathost --install</code></pre>
                 <div class="max-w-4xl mx-auto">
                     <div class="glass p-6 rounded-xl mb-6">
                         <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Config File Location</h3>
-                        <p class="text-gray-600 dark:text-gray-400 mb-2">Default: <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/.config/lolcathost/config.yaml</code></p>
+                        <p class="text-gray-600 dark:text-gray-400 mb-2">Configuration is stored at <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/etc/lolcathost/config.yaml</code> and managed by the daemon.</p>
+                        <ul class="list-disc list-inside text-gray-600 dark:text-gray-400 text-sm mt-2 space-y-1">
+                            <li><strong>TUI/CLI changes:</strong> Automatically saved to this file</li>
+                            <li><strong>Manual editing:</strong> Use <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">sudo nano /etc/lolcathost/config.yaml</code> (hot-reload enabled)</li>
+                        </ul>
                     </div>
                     <div class="glass p-6 rounded-xl mb-6">
                         <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Example Configuration</h3>

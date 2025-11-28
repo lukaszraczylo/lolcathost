@@ -51,6 +51,7 @@ jobs:
 
   release:
     needs: version
+    if: needs.version.outputs.version_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write

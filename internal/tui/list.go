@@ -95,6 +95,15 @@ func (l *ListView) SelectedAlias() string {
 	return ""
 }
 
+// GetAliases returns all available aliases.
+func (l *ListView) GetAliases() []string {
+	aliases := make([]string, len(l.items))
+	for i, item := range l.items {
+		aliases[i] = item.Entry.Alias
+	}
+	return aliases
+}
+
 // SetPending marks an item as pending.
 func (l *ListView) SetPending(alias string, pending bool) {
 	for i := range l.items {

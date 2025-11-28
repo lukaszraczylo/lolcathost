@@ -346,6 +346,27 @@ func (c *Client) ListBackups() ([]protocol.BackupInfo, error) {
 	return data.Backups, nil
 }
 
+// GetBackupContent returns the content of a backup file.
+func (c *Client) GetBackupContent(backupName string) (string, error) {
+	req, _ := protocol.NewRequest(protocol.RequestBackupContent, protocol.BackupContentPayload{
+		BackupName: backupName,
+	})
+
+	resp, err := c.send(req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.IsOK() {
+		return "", fmt.Errorf("backup content failed: %s", resp.Message)
+	}
+
+	var data protocol.BackupContentData
+	if err := resp.ParseData(&data); err != nil {
+		return "", err
+	}
+	return data.Content, nil
+}
+
 // RenameGroup renames a group.
 func (c *Client) RenameGroup(oldName, newName string) error {
 	req, _ := protocol.NewRequest(protocol.RequestRenameGroup, protocol.RenameGroupPayload{

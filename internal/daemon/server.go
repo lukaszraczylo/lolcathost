@@ -258,6 +258,9 @@ func (s *Server) handleRequest(req *protocol.Request, creds *PeerCredentials) *p
 	case protocol.RequestBackups:
 		return s.handleBackups()
 
+	case protocol.RequestBackupContent:
+		return s.handleBackupContent(req)
+
 	case protocol.RequestAdd:
 		resp := s.handleAdd(req)
 		if s.auditLogger != nil {
@@ -511,6 +514,25 @@ func (s *Server) handleBackups() *protocol.Response {
 	}
 
 	resp, _ := protocol.NewOKResponse(protocol.BackupsData{Backups: infos})
+	return resp
+}
+
+func (s *Server) handleBackupContent(req *protocol.Request) *protocol.Response {
+	var payload protocol.BackupContentPayload
+	if err := req.ParsePayload(&payload); err != nil {
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "invalid payload")
+	}
+
+	if payload.BackupName == "" {
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "backup name is required")
+	}
+
+	content, err := s.hosts.GetBackupContent(payload.BackupName)
+	if err != nil {
+		return protocol.NewErrorResponse(protocol.ErrCodeNotFound, fmt.Sprintf("failed to get backup content: %v", err))
+	}
+
+	resp, _ := protocol.NewOKResponse(protocol.BackupContentData{Content: content})
 	return resp
 }
 

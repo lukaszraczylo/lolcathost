@@ -88,7 +88,7 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 {
 		// No subcommand - launch TUI
-		runTUI(*configPath)
+		runTUI()
 		return
 	}
 
@@ -163,7 +163,7 @@ func runDaemon(configPath string) {
 	}
 }
 
-func runTUI(configPath string) {
+func runTUI() {
 	// Check installation
 	if err := installer.CheckInstallation(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -171,7 +171,7 @@ func runTUI(configPath string) {
 		os.Exit(1)
 	}
 
-	if err := tui.RunWithVersion(protocol.SocketPath, configPath, appVersion, githubOwner, githubRepo); err != nil {
+	if err := tui.RunWithVersion(protocol.SocketPath, appVersion, githubOwner, githubRepo); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

@@ -24,6 +24,7 @@ const (
 	ViewForm
 	ViewPresets
 	ViewGroups
+	ViewBackups
 	ViewHelp
 	ViewSearch
 )
@@ -34,16 +35,13 @@ type Model struct {
 	client    *client.Client
 	connected bool
 
-	// Config
-	configPath string
-	config     *config.Manager
-
 	// Views
 	mode         ViewMode
 	list         *ListView
 	form         *Form
 	presetPicker *PresetPicker
 	groupPicker  *GroupPicker
+	backupPicker *BackupPicker
 	searchInput  textinput.Model
 
 	// State
@@ -117,6 +115,18 @@ type (
 		groups []string
 		err    error
 	}
+	rollbackMsg struct {
+		name string
+		err  error
+	}
+	refreshBackupsMsg struct {
+		backups []protocol.BackupInfo
+		err     error
+	}
+	backupContentMsg struct {
+		content string
+		err     error
+	}
 	clearMsgMsg struct{}
 	tickMsg     struct{}
 	updateMsg   struct {
@@ -126,7 +136,7 @@ type (
 )
 
 // NewModel creates a new TUI model.
-func NewModel(socketPath, configPath string) *Model {
+func NewModel(socketPath string) *Model {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search..."
 	searchInput.CharLimit = 100
@@ -134,12 +144,11 @@ func NewModel(socketPath, configPath string) *Model {
 
 	return &Model{
 		client:       client.New(socketPath),
-		configPath:   configPath,
-		config:       config.NewManager(configPath),
 		list:         NewListView(),
 		form:         NewForm(),
 		presetPicker: NewPresetPicker(),
 		groupPicker:  NewGroupPicker(),
+		backupPicker: NewBackupPicker(),
 		searchInput:  searchInput,
 		mode:         ViewList,
 	}
@@ -251,6 +260,27 @@ func (m *Model) refreshGroups() tea.Cmd {
 	}
 }
 
+func (m *Model) rollback(backupName string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.client.Rollback(backupName)
+		return rollbackMsg{name: backupName, err: err}
+	}
+}
+
+func (m *Model) refreshBackups() tea.Cmd {
+	return func() tea.Msg {
+		backups, err := m.client.ListBackups()
+		return refreshBackupsMsg{backups: backups, err: err}
+	}
+}
+
+func (m *Model) fetchBackupContent(backupName string) tea.Cmd {
+	return func() tea.Msg {
+		content, err := m.client.GetBackupContent(backupName)
+		return backupContentMsg{content: content, err: err}
+	}
+}
+
 func (m *Model) tick() tea.Cmd {
 	return tea.Tick(time.Second*3, func(t time.Time) tea.Msg {
 		return tickMsg{}
@@ -291,6 +321,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.form.SetSize(msg.Width, msg.Height)
 		m.presetPicker.SetSize(msg.Width, msg.Height)
 		m.groupPicker.SetSize(msg.Width, msg.Height)
+		m.backupPicker.SetSize(msg.Width, msg.Height)
 		// Set search input width
 		searchWidth := msg.Width - 20
 		if searchWidth > 60 {
@@ -313,7 +344,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.refresh())
 			cmds = append(cmds, m.refreshPresets())
 			cmds = append(cmds, m.refreshGroups())
-			m.loadConfig()
 		}
 
 	case refreshMsg:
@@ -421,6 +451,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.groupPicker.SetGroups(msg.groups)
 		}
 
+	case rollbackMsg:
+		if msg.err != nil {
+			m.setError(fmt.Sprintf("Rollback failed: %v", msg.err))
+		} else {
+			cmds = append(cmds, m.refresh())
+			m.setSuccess("Restored from backup")
+		}
+		m.backupPicker.Cancel()
+		m.mode = ViewList
+
+	case refreshBackupsMsg:
+		if msg.err == nil && msg.backups != nil {
+			m.backupPicker.SetBackups(msg.backups)
+			// Fetch content for the first backup
+			if len(msg.backups) > 0 {
+				cmds = append(cmds, m.fetchBackupContent(msg.backups[0].Name))
+			}
+		}
+
+	case backupContentMsg:
+		if msg.err == nil {
+			m.backupPicker.SetPreviewContent(msg.content)
+		}
+
 	case clearMsgMsg:
 		if time.Since(m.messageTime) >= time.Second*3 {
 			m.message = ""
@@ -461,6 +515,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePresetKey(msg)
 	case ViewGroups:
 		return m.handleGroupKey(msg)
+	case ViewBackups:
+		return m.handleBackupKey(msg)
 	case ViewHelp:
 		return m.handleHelpKey(msg)
 	case ViewSearch:
@@ -502,9 +558,14 @@ func (m *Model) handleListKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "p":
 		m.mode = ViewPresets
+		// Pass available aliases to preset picker
+		m.presetPicker.SetAvailableAliases(m.list.GetAliases())
 	case "g":
 		m.mode = ViewGroups
 		return m.refreshGroups()
+	case "b":
+		m.mode = ViewBackups
+		return m.refreshBackups()
 	case "/":
 		m.mode = ViewSearch
 		m.searchInput.Focus()
@@ -551,6 +612,8 @@ func (m *Model) handlePresetKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePresetSelectKey(msg)
 	case PresetModeAdd, PresetModeEdit:
 		return m.handlePresetFormKey(msg)
+	case PresetModePickEnable, PresetModePickDisable:
+		return m.handlePresetPickerKey(msg)
 	case PresetModeConfirmDelete:
 		return m.handlePresetDeleteKey(msg)
 	}
@@ -585,25 +648,52 @@ func (m *Model) handlePresetFormKey(msg tea.KeyMsg) tea.Cmd {
 		m.presetPicker.CancelForm()
 		return nil
 	case "enter":
-		if errMsg := m.presetPicker.ValidateForm(); errMsg != "" {
-			m.setError(errMsg)
-			return m.clearMsg()
+		// Check which field is focused
+		switch m.presetPicker.Focus() {
+		case PresetFieldEnable:
+			m.presetPicker.OpenEnablePicker()
+			return nil
+		case PresetFieldDisable:
+			m.presetPicker.OpenDisablePicker()
+			return nil
+		case PresetFieldSave:
+			// Save the preset
+			if errMsg := m.presetPicker.ValidateForm(); errMsg != "" {
+				m.setError(errMsg)
+				return m.clearMsg()
+			}
+			name, enable, disable := m.presetPicker.FormValues()
+			if m.presetPicker.IsEdit() {
+				// For edit, delete old and add new
+				oldName := m.presetPicker.EditName()
+				return tea.Sequence(
+					func() tea.Msg {
+						m.client.DeletePreset(oldName)
+						return nil
+					},
+					m.addPreset(name, enable, disable),
+				)
+			}
+			return m.addPreset(name, enable, disable)
 		}
-		name, enable, disable := m.presetPicker.FormValues()
-		if m.presetPicker.IsEdit() {
-			// For edit, delete old and add new
-			oldName := m.presetPicker.EditName()
-			return tea.Sequence(
-				func() tea.Msg {
-					m.client.DeletePreset(oldName)
-					return nil
-				},
-				m.addPreset(name, enable, disable),
-			)
-		}
-		return m.addPreset(name, enable, disable)
 	}
 	return m.presetPicker.Update(msg)
+}
+
+func (m *Model) handlePresetPickerKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.presetPicker.ClosePicker()
+	case "enter":
+		m.presetPicker.ClosePicker()
+	case "up", "k":
+		m.presetPicker.PickerMoveUp()
+	case "down", "j":
+		m.presetPicker.PickerMoveDown()
+	case " ":
+		m.presetPicker.TogglePickerSelection()
+	}
+	return nil
 }
 
 func (m *Model) handlePresetDeleteKey(msg tea.KeyMsg) tea.Cmd {
@@ -683,6 +773,57 @@ func (m *Model) handleGroupDeleteKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func (m *Model) handleBackupKey(msg tea.KeyMsg) tea.Cmd {
+	switch m.backupPicker.Mode() {
+	case BackupModeSelect:
+		return m.handleBackupSelectKey(msg)
+	case BackupModeConfirmRestore:
+		return m.handleBackupRestoreKey(msg)
+	}
+	return nil
+}
+
+func (m *Model) handleBackupSelectKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc", "q":
+		m.mode = ViewList
+	case "up", "k":
+		m.backupPicker.MoveUp()
+		// Fetch content for newly selected backup
+		if backup := m.backupPicker.Selected(); backup != "" && m.backupPicker.PreviewContent() == "" {
+			return m.fetchBackupContent(backup)
+		}
+	case "down", "j":
+		m.backupPicker.MoveDown()
+		// Fetch content for newly selected backup
+		if backup := m.backupPicker.Selected(); backup != "" && m.backupPicker.PreviewContent() == "" {
+			return m.fetchBackupContent(backup)
+		}
+	case "shift+up", "K":
+		m.backupPicker.ScrollPreviewUp()
+	case "shift+down", "J":
+		m.backupPicker.ScrollPreviewDown()
+	case "enter":
+		m.backupPicker.InitRestore()
+	case "r":
+		return m.refreshBackups()
+	}
+	return nil
+}
+
+func (m *Model) handleBackupRestoreKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y":
+		if backup := m.backupPicker.Selected(); backup != "" {
+			return m.rollback(backup)
+		}
+		m.backupPicker.Cancel()
+	case "n", "N", "esc":
+		m.backupPicker.Cancel()
+	}
+	return nil
+}
+
 func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "q", "?":
@@ -717,23 +858,6 @@ func (m *Model) toggleSelected() tea.Cmd {
 
 	m.list.SetPending(item.Entry.Alias, true)
 	return m.toggle(item.Entry.Alias, !item.Entry.Enabled)
-}
-
-func (m *Model) loadConfig() {
-	if err := m.config.Load(); err != nil {
-		return
-	}
-
-	cfg := m.config.Get()
-	if cfg == nil {
-		return
-	}
-
-	var presetNames []string
-	for _, p := range cfg.Presets {
-		presetNames = append(presetNames, p.Name)
-	}
-	m.presetPicker.SetPresets(presetNames)
 }
 
 func (m *Model) setError(msg string) {
@@ -774,6 +898,8 @@ func (m *Model) View() string {
 		sb.WriteString(m.presetPicker.View())
 	case ViewGroups:
 		sb.WriteString(m.groupPicker.View())
+	case ViewBackups:
+		sb.WriteString(m.backupPicker.View())
 	case ViewHelp:
 		sb.WriteString(m.helpView())
 	case ViewSearch:
@@ -813,7 +939,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) helpBar() string {
-	return helpBarStyle.Render(fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Presets  %s: Groups  %s: Search  %s: Help  %s: Quit",
+	return helpBarStyle.Render(fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Presets  %s: Groups  %s: Backups  %s: Search  %s: Help  %s: Quit",
 		helpKeyStyle.Render("↑↓"),
 		helpKeyStyle.Render("jk"),
 		helpKeyStyle.Render("Space"),
@@ -822,6 +948,7 @@ func (m *Model) helpBar() string {
 		helpKeyStyle.Render("d"),
 		helpKeyStyle.Render("p"),
 		helpKeyStyle.Render("g"),
+		helpKeyStyle.Render("b"),
 		helpKeyStyle.Render("/"),
 		helpKeyStyle.Render("?"),
 		helpKeyStyle.Render("q")))
@@ -855,6 +982,7 @@ func (m *Model) helpView() string {
 		{"d", "Delete selected entry"},
 		{"p", "Open preset manager"},
 		{"g", "Open group manager"},
+		{"b", "Open backup manager"},
 		{"/", "Search"},
 		{"r", "Refresh list"},
 		{"?", "Toggle this help"},
@@ -866,6 +994,14 @@ func (m *Model) helpView() string {
 			helpKeyStyle.Width(15).Render(h.key),
 			helpDescStyle.Render(h.desc)))
 	}
+
+	// Show blocked domains
+	sb.WriteString("\n")
+	sb.WriteString(inputLabelStyle.Render("Blocked Domains:"))
+	sb.WriteString("\n")
+	blockedDomains := config.GetBlockedDomains()
+	sb.WriteString(helpDescStyle.Render("  " + strings.Join(blockedDomains, ", ")))
+	sb.WriteString("\n")
 
 	sb.WriteString("\n")
 	sb.WriteString(helpDescStyle.Render("Press ? or Esc to close"))
@@ -887,13 +1023,13 @@ func (m *Model) searchView() string {
 }
 
 // Run starts the TUI application.
-func Run(socketPath, configPath string) error {
-	return RunWithVersion(socketPath, configPath, "dev", "", "")
+func Run(socketPath string) error {
+	return RunWithVersion(socketPath, "dev", "", "")
 }
 
 // RunWithVersion starts the TUI application with version info for update checking.
-func RunWithVersion(socketPath, configPath, version, githubOwner, githubRepo string) error {
-	m := NewModel(socketPath, configPath)
+func RunWithVersion(socketPath, version, githubOwner, githubRepo string) error {
+	m := NewModel(socketPath)
 	m.version = version
 	m.githubOwner = githubOwner
 	m.githubRepo = githubRepo

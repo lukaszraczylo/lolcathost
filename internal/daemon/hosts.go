@@ -292,6 +292,23 @@ type BackupInfo struct {
 	Size      int64
 }
 
+// GetBackupContent returns the content of a backup file.
+func (m *HostsManager) GetBackupContent(name string) (string, error) {
+	backupPath := filepath.Join(m.backupDir, name)
+
+	// Validate backup name to prevent path traversal
+	if filepath.Base(name) != name || !strings.HasPrefix(name, "hosts.") || !strings.HasSuffix(name, ".bak") {
+		return "", fmt.Errorf("invalid backup name")
+	}
+
+	content, err := os.ReadFile(backupPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read backup: %w", err)
+	}
+
+	return string(content), nil
+}
+
 // RestoreBackup restores a backup by name.
 func (m *HostsManager) RestoreBackup(name string) error {
 	backupPath := filepath.Join(m.backupDir, name)

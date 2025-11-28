@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lukaszraczylo/lolcathost/internal/config"
 )
 
 // FormMode represents the form mode.
@@ -241,6 +242,11 @@ func (f *Form) Validate() string {
 	}
 	if group == "" {
 		return "Group is required"
+	}
+
+	// Check if domain is blocked
+	if config.IsBlockedDomain(domain) {
+		return fmt.Sprintf("Domain '%s' is blocked (Apple system domain)", domain)
 	}
 
 	return ""

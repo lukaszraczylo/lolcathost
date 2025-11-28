@@ -87,7 +87,7 @@ The installer will:
 - Install the binary to `/usr/local/bin/lolcathost`
 - Create a LaunchDaemon (macOS) or systemd service (Linux)
 - Start the daemon automatically
-- Create the default config at `~/.config/lolcathost/config.yaml`
+- Create the default config at `/etc/lolcathost/config.yaml`
 
 ## Quick Start
 
@@ -117,7 +117,10 @@ lolcathost
 
 ### Config File Location
 
-Default: `~/.config/lolcathost/config.yaml`
+The configuration is stored at `/etc/lolcathost/config.yaml` and managed by the daemon.
+
+- **TUI/CLI changes**: All changes made through the TUI or CLI are automatically saved to this file
+- **Manual editing**: To edit manually, use `sudo nano /etc/lolcathost/config.yaml` (changes are picked up automatically via hot-reload)
 
 ### Example Configuration
 

@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lukaszraczylo/lolcathost/internal/config"
 )
@@ -337,18 +338,35 @@ func (i *Installer) installLaunchDaemon() error {
 	plistPath := filepath.Join(LaunchDaemonDir, "com.lolcathost.daemon.plist")
 	plistContent := fmt.Sprintf(LaunchDaemonPlist, i.binaryPath)
 
+	// Unload if already loaded (do this before writing plist)
+	i.log("  Stopping existing daemon if running...")
+	exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
+
+	// Give launchd time to fully unload the service
+	time.Sleep(500 * time.Millisecond)
+
+	// Remove old plist to ensure clean state
+	os.Remove(plistPath)
+
 	i.log("  Writing LaunchDaemon plist...")
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to write plist: %w", err)
 	}
 
-	// Unload if already loaded
-	exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
-
 	// Bootstrap the daemon
 	i.log("  Starting daemon...")
-	if err := exec.Command("launchctl", "bootstrap", "system", plistPath).Run(); err != nil {
-		return fmt.Errorf("failed to bootstrap daemon: %w", err)
+	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Exit code 5 means "service already loaded" - try kickstart instead
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 5 {
+			i.log("  Service already registered, restarting...")
+			if err := exec.Command("launchctl", "kickstart", "-k", "system/com.lolcathost.daemon").Run(); err != nil {
+				return fmt.Errorf("failed to restart daemon: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to bootstrap daemon: %w (output: %s)", err, string(output))
 	}
 
 	return nil
@@ -399,18 +417,10 @@ func (i *Installer) uninstallSystemdService() {
 }
 
 func (i *Installer) createDefaultConfig() error {
-	// Get the real user's home directory
-	username := os.Getenv("SUDO_USER")
-	if username == "" {
-		return nil // Can't determine user
-	}
-
-	u, err := user.Lookup(username)
-	if err != nil {
-		return fmt.Errorf("failed to lookup user: %w", err)
-	}
-
-	configPath := filepath.Join(u.HomeDir, ".config", "lolcathost", "config.yaml")
+	// Config is stored at /etc/lolcathost/config.yaml and managed by the daemon.
+	// The daemon creates a default config if none exists when it starts.
+	// No user-level config is created to avoid confusion with two config files.
+	configPath := "/etc/lolcathost/config.yaml"
 
 	// Check if config already exists
 	if _, err := os.Stat(configPath); err == nil {
@@ -418,20 +428,17 @@ func (i *Installer) createDefaultConfig() error {
 		return nil
 	}
 
+	// Create config directory
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
 	i.log("  Creating default config at %s...", configPath)
 
 	if err := config.CreateDefault(configPath); err != nil {
 		return err
 	}
-
-	// Change ownership to the real user
-	uid, _ := strconv.Atoi(u.Uid)
-	gid, _ := strconv.Atoi(u.Gid)
-
-	configDir := filepath.Dir(configPath)
-	os.Chown(configDir, uid, gid)
-	os.Chown(filepath.Dir(configDir), uid, gid)
-	os.Chown(configPath, uid, gid)
 
 	return nil
 }

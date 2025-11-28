@@ -17,6 +17,8 @@ const (
 	PresetModeAdd
 	PresetModeEdit
 	PresetModeConfirmDelete
+	PresetModePickEnable  // Multi-select picker for enable aliases
+	PresetModePickDisable // Multi-select picker for disable aliases
 )
 
 // PresetFormField represents a form field index.
@@ -26,19 +28,26 @@ const (
 	PresetFieldName PresetFormField = iota
 	PresetFieldEnable
 	PresetFieldDisable
+	PresetFieldSave
 	PresetFieldCount
 )
 
 // PresetPicker handles the preset selection and management UI.
 type PresetPicker struct {
-	presets  []protocol.PresetInfo
-	cursor   int
-	width    int
-	height   int
-	mode     PresetMode
-	fields   []textinput.Model
-	focus    PresetFormField
-	editName string // Original name when editing
+	presets          []protocol.PresetInfo
+	cursor           int
+	width            int
+	height           int
+	mode             PresetMode
+	fields           []textinput.Model
+	focus            PresetFormField
+	editName         string   // Original name when editing
+	availableAliases []string // Available host aliases for reference
+
+	// Multi-select picker state
+	pickerCursor    int
+	selectedEnable  map[string]bool
+	selectedDisable map[string]bool
 }
 
 // NewPresetPicker creates a new preset picker.
@@ -61,8 +70,10 @@ func NewPresetPicker() *PresetPicker {
 	fields[PresetFieldDisable].CharLimit = 500
 
 	return &PresetPicker{
-		fields: fields,
-		mode:   PresetModeSelect,
+		fields:          fields,
+		mode:            PresetModeSelect,
+		selectedEnable:  make(map[string]bool),
+		selectedDisable: make(map[string]bool),
 	}
 }
 
@@ -83,6 +94,11 @@ func (p *PresetPicker) SetPresetsWithInfo(presets []protocol.PresetInfo) {
 	if p.cursor >= len(presets) {
 		p.cursor = max(0, len(presets)-1)
 	}
+}
+
+// SetAvailableAliases sets the list of available host aliases for reference.
+func (p *PresetPicker) SetAvailableAliases(aliases []string) {
+	p.availableAliases = aliases
 }
 
 // SetSize sets the picker dimensions.
@@ -141,6 +157,11 @@ func (p *PresetPicker) SetMode(mode PresetMode) {
 	p.mode = mode
 }
 
+// Focus returns the currently focused form field.
+func (p *PresetPicker) Focus() PresetFormField {
+	return p.focus
+}
+
 // InitAdd initializes the form for adding a new preset.
 func (p *PresetPicker) InitAdd() {
 	p.mode = PresetModeAdd
@@ -150,6 +171,10 @@ func (p *PresetPicker) InitAdd() {
 	}
 	p.focus = PresetFieldName
 	p.fields[PresetFieldName].Focus()
+	// Clear selections
+	p.selectedEnable = make(map[string]bool)
+	p.selectedDisable = make(map[string]bool)
+	p.pickerCursor = 0
 }
 
 // InitEdit initializes the form for editing an existing preset.
@@ -163,8 +188,17 @@ func (p *PresetPicker) InitEdit() {
 	p.editName = preset.Name
 
 	p.fields[PresetFieldName].SetValue(preset.Name)
-	p.fields[PresetFieldEnable].SetValue(strings.Join(preset.Enable, ","))
-	p.fields[PresetFieldDisable].SetValue(strings.Join(preset.Disable, ","))
+
+	// Initialize selections from preset (only include aliases that exist)
+	p.selectedEnable = make(map[string]bool)
+	p.selectedDisable = make(map[string]bool)
+	for _, alias := range p.filterExistingAliases(preset.Enable) {
+		p.selectedEnable[alias] = true
+	}
+	for _, alias := range p.filterExistingAliases(preset.Disable) {
+		p.selectedDisable[alias] = true
+	}
+	p.pickerCursor = 0
 
 	p.focus = PresetFieldName
 	p.fields[PresetFieldName].Focus()
@@ -199,47 +233,35 @@ func (p *PresetPicker) Update(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	// Update the focused field
-	var cmd tea.Cmd
-	p.fields[p.focus], cmd = p.fields[p.focus].Update(msg)
-	return cmd
+	// Only update text field if focused on name
+	if p.focus == PresetFieldName {
+		var cmd tea.Cmd
+		p.fields[PresetFieldName], cmd = p.fields[PresetFieldName].Update(msg)
+		return cmd
+	}
+	return nil
 }
 
 func (p *PresetPicker) nextField() {
-	p.fields[p.focus].Blur()
+	// Only blur/focus the name field (it's the only text input)
+	if p.focus == PresetFieldName {
+		p.fields[PresetFieldName].Blur()
+	}
 	p.focus = (p.focus + 1) % PresetFieldCount
-	p.fields[p.focus].Focus()
+	if p.focus == PresetFieldName {
+		p.fields[PresetFieldName].Focus()
+	}
 }
 
 func (p *PresetPicker) prevField() {
-	p.fields[p.focus].Blur()
+	// Only blur/focus the name field (it's the only text input)
+	if p.focus == PresetFieldName {
+		p.fields[PresetFieldName].Blur()
+	}
 	p.focus = (p.focus - 1 + PresetFieldCount) % PresetFieldCount
-	p.fields[p.focus].Focus()
-}
-
-// FormValues returns the form values (name, enable list, disable list).
-func (p *PresetPicker) FormValues() (name string, enable, disable []string) {
-	name = strings.TrimSpace(p.fields[PresetFieldName].Value())
-
-	enableStr := strings.TrimSpace(p.fields[PresetFieldEnable].Value())
-	if enableStr != "" {
-		for _, s := range strings.Split(enableStr, ",") {
-			if trimmed := strings.TrimSpace(s); trimmed != "" {
-				enable = append(enable, trimmed)
-			}
-		}
+	if p.focus == PresetFieldName {
+		p.fields[PresetFieldName].Focus()
 	}
-
-	disableStr := strings.TrimSpace(p.fields[PresetFieldDisable].Value())
-	if disableStr != "" {
-		for _, s := range strings.Split(disableStr, ",") {
-			if trimmed := strings.TrimSpace(s); trimmed != "" {
-				disable = append(disable, trimmed)
-			}
-		}
-	}
-
-	return name, enable, disable
 }
 
 // EditName returns the original name when editing.
@@ -254,16 +276,89 @@ func (p *PresetPicker) IsEdit() bool {
 
 // ValidateForm validates the form values.
 func (p *PresetPicker) ValidateForm() string {
-	name, enable, disable := p.FormValues()
+	name := strings.TrimSpace(p.fields[PresetFieldName].Value())
 
 	if name == "" {
 		return "Preset name is required"
 	}
-	if len(enable) == 0 && len(disable) == 0 {
-		return "At least one alias to enable or disable is required"
+	if len(p.selectedEnable) == 0 && len(p.selectedDisable) == 0 {
+		return "Select at least one alias to enable or disable"
 	}
 
 	return ""
+}
+
+// FormValues returns the current form values using the selection maps.
+func (p *PresetPicker) FormValues() (name string, enable, disable []string) {
+	name = strings.TrimSpace(p.fields[PresetFieldName].Value())
+
+	for alias := range p.selectedEnable {
+		enable = append(enable, alias)
+	}
+	for alias := range p.selectedDisable {
+		disable = append(disable, alias)
+	}
+
+	return name, enable, disable
+}
+
+// OpenEnablePicker opens the alias picker for enable selection.
+func (p *PresetPicker) OpenEnablePicker() {
+	p.mode = PresetModePickEnable
+	p.pickerCursor = 0
+}
+
+// OpenDisablePicker opens the alias picker for disable selection.
+func (p *PresetPicker) OpenDisablePicker() {
+	p.mode = PresetModePickDisable
+	p.pickerCursor = 0
+}
+
+// ClosePicker closes the alias picker and returns to form.
+func (p *PresetPicker) ClosePicker() {
+	if p.editName != "" {
+		p.mode = PresetModeEdit
+	} else {
+		p.mode = PresetModeAdd
+	}
+}
+
+// TogglePickerSelection toggles the currently highlighted alias.
+func (p *PresetPicker) TogglePickerSelection() {
+	filtered := p.getFilteredAliases()
+	if p.pickerCursor >= len(filtered) {
+		return
+	}
+	alias := filtered[p.pickerCursor]
+
+	if p.mode == PresetModePickEnable {
+		if p.selectedEnable[alias] {
+			delete(p.selectedEnable, alias)
+		} else {
+			p.selectedEnable[alias] = true
+		}
+	} else if p.mode == PresetModePickDisable {
+		if p.selectedDisable[alias] {
+			delete(p.selectedDisable, alias)
+		} else {
+			p.selectedDisable[alias] = true
+		}
+	}
+}
+
+// PickerMoveUp moves picker cursor up.
+func (p *PresetPicker) PickerMoveUp() {
+	if p.pickerCursor > 0 {
+		p.pickerCursor--
+	}
+}
+
+// PickerMoveDown moves picker cursor down.
+func (p *PresetPicker) PickerMoveDown() {
+	filtered := p.getFilteredAliases()
+	if p.pickerCursor < len(filtered)-1 {
+		p.pickerCursor++
+	}
 }
 
 // View renders the preset picker.
@@ -271,6 +366,8 @@ func (p *PresetPicker) View() string {
 	switch p.mode {
 	case PresetModeAdd, PresetModeEdit:
 		return p.formView()
+	case PresetModePickEnable, PresetModePickDisable:
+		return p.pickerView()
 	case PresetModeConfirmDelete:
 		return p.deleteView()
 	default:
@@ -282,6 +379,8 @@ func (p *PresetPicker) selectView() string {
 	var sb strings.Builder
 
 	sb.WriteString(titleStyle.Render("Presets"))
+	sb.WriteString("\n")
+	sb.WriteString(helpDescStyle.Render("Quickly enable/disable multiple hosts at once"))
 	sb.WriteString("\n\n")
 
 	if len(p.presets) == 0 {
@@ -292,14 +391,26 @@ func (p *PresetPicker) selectView() string {
 		for i, preset := range p.presets {
 			if i == p.cursor {
 				sb.WriteString(presetSelectedStyle.Render("▸ " + preset.Name))
+				sb.WriteString("\n")
+				// Show details for selected preset (only aliases that exist)
+				enableList := p.filterExistingAliases(preset.Enable)
+				disableList := p.filterExistingAliases(preset.Disable)
+				if len(enableList) > 0 {
+					sb.WriteString(enabledStyle.Render("    ● Enable: " + strings.Join(enableList, ", ")))
+					sb.WriteString("\n")
+				}
+				if len(disableList) > 0 {
+					sb.WriteString(disabledStyle.Render("    ○ Disable: " + strings.Join(disableList, ", ")))
+					sb.WriteString("\n")
+				}
 			} else {
 				sb.WriteString(presetItemStyle.Render("  " + preset.Name))
+				sb.WriteString("\n")
 			}
-			sb.WriteString("\n")
 		}
 	}
 
-	sb.WriteString("\n\n")
+	sb.WriteString("\n")
 	sb.WriteString(helpDescStyle.Render("↑↓ navigate • Enter apply • n new • e edit • d delete • Esc cancel"))
 
 	return dialogStyle.Render(sb.String())
@@ -314,25 +425,160 @@ func (p *PresetPicker) formView() string {
 	}
 
 	sb.WriteString(titleStyle.Render(title))
+	sb.WriteString("\n")
+	sb.WriteString(helpDescStyle.Render("A preset lets you toggle multiple hosts with one action"))
 	sb.WriteString("\n\n")
 
-	labels := []string{"Name:", "Enable aliases (comma-separated):", "Disable aliases (comma-separated):"}
+	// Name field
+	sb.WriteString(inputLabelStyle.Render("Name:"))
+	sb.WriteString("\n")
+	style := inputStyle
+	if p.focus == PresetFieldName {
+		style = inputFocusStyle
+	}
+	sb.WriteString(style.Render(p.fields[PresetFieldName].View()))
+	sb.WriteString("\n\n")
 
-	for i, label := range labels {
-		sb.WriteString(inputLabelStyle.Render(label))
-		sb.WriteString("\n")
-
-		style := inputStyle
-		if PresetFormField(i) == p.focus {
-			style = inputFocusStyle
+	// Enable selection (button-style)
+	enableLabel := "Enable hosts:"
+	if p.focus == PresetFieldEnable {
+		enableLabel = "▸ Enable hosts: (press Enter to select)"
+	}
+	sb.WriteString(inputLabelStyle.Render(enableLabel))
+	sb.WriteString("\n")
+	if len(p.selectedEnable) > 0 {
+		var enableList []string
+		for alias := range p.selectedEnable {
+			enableList = append(enableList, alias)
 		}
+		sb.WriteString(enabledStyle.Render("  ● " + strings.Join(enableList, ", ")))
+	} else {
+		sb.WriteString(helpDescStyle.Render("  (none selected)"))
+	}
+	sb.WriteString("\n\n")
 
-		sb.WriteString(style.Render(p.fields[i].View()))
-		sb.WriteString("\n\n")
+	// Disable selection (button-style)
+	disableLabel := "Disable hosts:"
+	if p.focus == PresetFieldDisable {
+		disableLabel = "▸ Disable hosts: (press Enter to select)"
+	}
+	sb.WriteString(inputLabelStyle.Render(disableLabel))
+	sb.WriteString("\n")
+	if len(p.selectedDisable) > 0 {
+		var disableList []string
+		for alias := range p.selectedDisable {
+			disableList = append(disableList, alias)
+		}
+		sb.WriteString(disabledStyle.Render("  ○ " + strings.Join(disableList, ", ")))
+	} else {
+		sb.WriteString(helpDescStyle.Render("  (none selected)"))
+	}
+	sb.WriteString("\n\n")
+
+	// Save button
+	if p.focus == PresetFieldSave {
+		sb.WriteString(presetSelectedStyle.Render("▸ [ Save Preset ]"))
+	} else {
+		sb.WriteString(presetItemStyle.Render("  [ Save Preset ]"))
+	}
+	sb.WriteString("\n\n")
+
+	sb.WriteString(helpDescStyle.Render("Tab/↓ next • Enter select/save • Esc cancel"))
+
+	return dialogStyle.Render(sb.String())
+}
+
+// getFilteredAliases returns aliases filtered for the current picker mode.
+// Enable picker hides items already in disable list, and vice versa.
+func (p *PresetPicker) getFilteredAliases() []string {
+	var filtered []string
+	for _, alias := range p.availableAliases {
+		if p.mode == PresetModePickEnable {
+			// Don't show items already in disable list (unless also in enable)
+			if !p.selectedDisable[alias] || p.selectedEnable[alias] {
+				filtered = append(filtered, alias)
+			}
+		} else {
+			// Don't show items already in enable list (unless also in disable)
+			if !p.selectedEnable[alias] || p.selectedDisable[alias] {
+				filtered = append(filtered, alias)
+			}
+		}
+	}
+	return filtered
+}
+
+// filterExistingAliases filters a list of aliases to only include those that exist.
+func (p *PresetPicker) filterExistingAliases(aliases []string) []string {
+	if len(p.availableAliases) == 0 {
+		return aliases
+	}
+	existsMap := make(map[string]bool)
+	for _, alias := range p.availableAliases {
+		existsMap[alias] = true
+	}
+	var filtered []string
+	for _, alias := range aliases {
+		if existsMap[alias] {
+			filtered = append(filtered, alias)
+		}
+	}
+	return filtered
+}
+
+func (p *PresetPicker) pickerView() string {
+	var sb strings.Builder
+
+	title := "Select hosts to ENABLE"
+	if p.mode == PresetModePickDisable {
+		title = "Select hosts to DISABLE"
 	}
 
+	sb.WriteString(titleStyle.Render(title))
 	sb.WriteString("\n")
-	sb.WriteString(helpDescStyle.Render("Tab/↓ next • Shift+Tab/↑ prev • Enter save • Esc cancel"))
+	sb.WriteString(helpDescStyle.Render("Space to toggle • Enter to confirm • Esc to cancel"))
+	sb.WriteString("\n\n")
+
+	filtered := p.getFilteredAliases()
+
+	if len(filtered) == 0 {
+		if len(p.availableAliases) == 0 {
+			sb.WriteString(helpDescStyle.Render("No hosts available. Add some hosts first."))
+		} else {
+			sb.WriteString(helpDescStyle.Render("All hosts are already in the other list."))
+		}
+	} else {
+		// Clamp cursor to filtered list
+		if p.pickerCursor >= len(filtered) {
+			p.pickerCursor = len(filtered) - 1
+		}
+
+		for i, alias := range filtered {
+			var indicator string
+			if p.mode == PresetModePickEnable {
+				if p.selectedEnable[alias] {
+					indicator = enabledStyle.Render("[●]")
+				} else {
+					indicator = helpDescStyle.Render("[ ]")
+				}
+			} else {
+				if p.selectedDisable[alias] {
+					indicator = disabledStyle.Render("[○]")
+				} else {
+					indicator = helpDescStyle.Render("[ ]")
+				}
+			}
+
+			line := indicator + " " + alias
+
+			if i == p.pickerCursor {
+				sb.WriteString(presetSelectedStyle.Render("▸ " + line))
+			} else {
+				sb.WriteString(presetItemStyle.Render("  " + line))
+			}
+			sb.WriteString("\n")
+		}
+	}
 
 	return dialogStyle.Render(sb.String())
 }

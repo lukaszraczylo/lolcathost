@@ -13,23 +13,24 @@ const SocketPath = "/var/run/lolcathost.sock"
 type RequestType string
 
 const (
-	RequestPing         RequestType = "ping"
-	RequestStatus       RequestType = "status"
-	RequestList         RequestType = "list"
-	RequestSet          RequestType = "set"
-	RequestAdd          RequestType = "add"
-	RequestDelete       RequestType = "delete"
-	RequestSync         RequestType = "sync"
-	RequestPreset       RequestType = "preset"
-	RequestRollback     RequestType = "rollback"
-	RequestBackups      RequestType = "backups"
-	RequestAddGroup     RequestType = "add_group"
-	RequestDeleteGroup  RequestType = "delete_group"
-	RequestRenameGroup  RequestType = "rename_group"
-	RequestListGroups   RequestType = "list_groups"
-	RequestAddPreset    RequestType = "add_preset"
-	RequestDeletePreset RequestType = "delete_preset"
-	RequestListPresets  RequestType = "list_presets"
+	RequestPing          RequestType = "ping"
+	RequestStatus        RequestType = "status"
+	RequestList          RequestType = "list"
+	RequestSet           RequestType = "set"
+	RequestAdd           RequestType = "add"
+	RequestDelete        RequestType = "delete"
+	RequestSync          RequestType = "sync"
+	RequestPreset        RequestType = "preset"
+	RequestRollback      RequestType = "rollback"
+	RequestBackups       RequestType = "backups"
+	RequestAddGroup      RequestType = "add_group"
+	RequestDeleteGroup   RequestType = "delete_group"
+	RequestRenameGroup   RequestType = "rename_group"
+	RequestListGroups    RequestType = "list_groups"
+	RequestAddPreset     RequestType = "add_preset"
+	RequestDeletePreset  RequestType = "delete_preset"
+	RequestListPresets   RequestType = "list_presets"
+	RequestBackupContent RequestType = "backup_content"
 )
 
 // ErrorCode defines standard error codes.
@@ -68,6 +69,11 @@ type PresetPayload struct {
 
 // RollbackPayload is the payload for rollback requests.
 type RollbackPayload struct {
+	BackupName string `json:"backup_name"`
+}
+
+// BackupContentPayload is the payload for backup_content requests.
+type BackupContentPayload struct {
 	BackupName string `json:"backup_name"`
 }
 
@@ -167,6 +173,11 @@ type BackupInfo struct {
 	Name      string `json:"name"`
 	Timestamp int64  `json:"timestamp"`
 	Size      int64  `json:"size"`
+}
+
+// BackupContentData is the data for backup_content responses.
+type BackupContentData struct {
+	Content string `json:"content"`
 }
 
 // NewRequest creates a new request with the given type and payload.
