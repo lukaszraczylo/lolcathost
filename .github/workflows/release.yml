@@ -29,8 +29,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.semver.outputs.version }}
-      version_tag: ${{ steps.semver.outputs.version_tag }}
+      version: ${{ steps.version_formatted.outputs.version }}
+      version_tag: ${{ steps.version_formatted.outputs.version_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,10 +44,17 @@ jobs:
           config_file: semver.yaml
           repository_local: true
 
+      - name: Format version
+        id: version_formatted
+        run: |
+          VERSION="${{ steps.semver.outputs.semantic_version }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=v${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Print version
         run: |
-          echo "Version: ${{ steps.semver.outputs.version }}"
-          echo "Version tag: ${{ steps.semver.outputs.version_tag }}"
+          echo "Version: ${{ steps.version_formatted.outputs.version }}"
+          echo "Version tag: ${{ steps.version_formatted.outputs.version_tag }}"
 
   release:
     needs: version
