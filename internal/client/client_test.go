@@ -474,6 +474,276 @@ func TestClient_RequestTypes_Matrix(t *testing.T) {
 	}
 }
 
+func TestClient_Add(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestAdd {
+			var payload protocol.AddPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "test.local", payload.Domain)
+			assert.Equal(t, "127.0.0.1", payload.IP)
+			assert.Equal(t, "test-local", payload.Alias)
+			assert.Equal(t, "dev", payload.Group)
+			assert.True(t, payload.Enabled)
+
+			resp, _ := protocol.NewOKResponse(protocol.SetData{Domain: payload.Domain, Applied: true})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	data, err := client.Add("test.local", "127.0.0.1", "test-local", "dev", true)
+	assert.NoError(t, err)
+	assert.Equal(t, "test.local", data.Domain)
+	assert.True(t, data.Applied)
+}
+
+func TestClient_Delete(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestDelete {
+			var payload protocol.DeletePayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "test-alias", payload.Alias)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"deleted": payload.Alias})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.Delete("test-alias")
+	assert.NoError(t, err)
+}
+
+func TestClient_AddGroup(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestAddGroup {
+			var payload protocol.GroupPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "newgroup", payload.Name)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"added": payload.Name})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.AddGroup("newgroup")
+	assert.NoError(t, err)
+}
+
+func TestClient_DeleteGroup(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestDeleteGroup {
+			var payload protocol.GroupPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "todelete", payload.Name)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"deleted": payload.Name})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.DeleteGroup("todelete")
+	assert.NoError(t, err)
+}
+
+func TestClient_RenameGroup(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestRenameGroup {
+			var payload protocol.RenameGroupPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "oldname", payload.OldName)
+			assert.Equal(t, "newname", payload.NewName)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"renamed": payload.NewName})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.RenameGroup("oldname", "newname")
+	assert.NoError(t, err)
+}
+
+func TestClient_ListGroups(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestListGroups {
+			resp, _ := protocol.NewOKResponse(protocol.GroupsData{
+				Groups: []string{"dev", "staging", "prod"},
+			})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	groups, err := client.ListGroups()
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"dev", "staging", "prod"}, groups)
+}
+
+func TestClient_GetBackupContent(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	expectedContent := "127.0.0.1\tlocalhost\n"
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestBackupContent {
+			var payload protocol.BackupContentPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "hosts.backup.bak", payload.BackupName)
+
+			resp, _ := protocol.NewOKResponse(protocol.BackupContentData{
+				Content: expectedContent,
+			})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	content, err := client.GetBackupContent("hosts.backup.bak")
+	require.NoError(t, err)
+
+	assert.Equal(t, expectedContent, content)
+}
+
+func TestClient_AddPreset(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestAddPreset {
+			var payload protocol.AddPresetPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "newpreset", payload.Name)
+			assert.Equal(t, []string{"a", "b"}, payload.Enable)
+			assert.Equal(t, []string{"c"}, payload.Disable)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"added": payload.Name})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.AddPreset("newpreset", []string{"a", "b"}, []string{"c"})
+	assert.NoError(t, err)
+}
+
+func TestClient_DeletePreset(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestDeletePreset {
+			var payload protocol.PresetPayload
+			req.ParsePayload(&payload)
+			assert.Equal(t, "todelete", payload.Name)
+
+			resp, _ := protocol.NewOKResponse(map[string]string{"deleted": payload.Name})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	err = client.DeletePreset("todelete")
+	assert.NoError(t, err)
+}
+
+func TestClient_ListPresets(t *testing.T) {
+	server := newMockServer(t)
+	defer server.close()
+
+	server.handler = func(req *protocol.Request) *protocol.Response {
+		if req.Type == protocol.RequestListPresets {
+			resp, _ := protocol.NewOKResponse(protocol.PresetsData{
+				Presets: []protocol.PresetInfo{
+					{Name: "local", Enable: []string{"a"}, Disable: []string{"b"}},
+					{Name: "staging", Enable: []string{"b"}, Disable: []string{"a"}},
+				},
+			})
+			return resp
+		}
+		return protocol.NewErrorResponse(protocol.ErrCodeInvalidRequest, "unexpected")
+	}
+
+	client := New(server.path)
+	err := client.Connect()
+	require.NoError(t, err)
+	defer client.Close()
+
+	presets, err := client.ListPresets()
+	require.NoError(t, err)
+
+	assert.Len(t, presets, 2)
+	assert.Equal(t, "local", presets[0].Name)
+	assert.Equal(t, "staging", presets[1].Name)
+}
+
 func BenchmarkClient_Ping(b *testing.B) {
 	tmpDir := b.TempDir()
 	socketPath := filepath.Join(tmpDir, "bench.sock")

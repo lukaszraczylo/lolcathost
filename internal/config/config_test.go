@@ -265,3 +265,328 @@ func TestFlushMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultConfigDir(t *testing.T) {
+	dir := DefaultConfigDir()
+	assert.NotEmpty(t, dir)
+	assert.Contains(t, dir, ".config/lolcathost")
+}
+
+func TestDefaultConfigPath(t *testing.T) {
+	path := DefaultConfigPath()
+	assert.NotEmpty(t, path)
+	assert.Contains(t, path, "config.yaml")
+}
+
+func TestConfig_GenerateAlias(t *testing.T) {
+	cfg := &Config{
+		Groups: []Group{
+			{
+				Name: "dev",
+				Hosts: []Host{
+					{Domain: "existing.com", IP: "127.0.0.1", Alias: "existing-com", Enabled: true},
+				},
+			},
+		},
+	}
+
+	t.Run("simple domain", func(t *testing.T) {
+		alias := cfg.GenerateAlias("newdomain.com")
+		assert.Equal(t, "newdomain-com", alias)
+	})
+
+	t.Run("domain with underscore", func(t *testing.T) {
+		alias := cfg.GenerateAlias("my_app.test")
+		assert.Equal(t, "my-app-test", alias)
+	})
+
+	t.Run("duplicate generates numbered alias", func(t *testing.T) {
+		alias := cfg.GenerateAlias("existing.com")
+		assert.Equal(t, "existing-com-2", alias)
+	})
+}
+
+func TestConfig_AddHost(t *testing.T) {
+	t.Run("add to existing group", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{}},
+			},
+		}
+		err := cfg.AddHost("test.local", "127.0.0.1", "test-local", "dev", true)
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups[0].Hosts, 1)
+		assert.Equal(t, "test.local", cfg.Groups[0].Hosts[0].Domain)
+	})
+
+	t.Run("add to new group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.AddHost("test.local", "127.0.0.1", "test-local", "newgroup", true)
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups, 1)
+		assert.Equal(t, "newgroup", cfg.Groups[0].Name)
+	})
+
+	t.Run("auto-generate alias", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.AddHost("auto.test", "127.0.0.1", "", "dev", true)
+		require.NoError(t, err)
+		assert.Equal(t, "auto-test", cfg.Groups[0].Hosts[0].Alias)
+	})
+
+	t.Run("duplicate alias error", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{{Domain: "a.com", IP: "127.0.0.1", Alias: "existing"}}},
+			},
+		}
+		err := cfg.AddHost("b.com", "127.0.0.1", "existing", "dev", true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "alias already exists")
+	})
+}
+
+func TestConfig_AddGroup(t *testing.T) {
+	t.Run("add new group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.AddGroup("newgroup")
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups, 1)
+		assert.Equal(t, "newgroup", cfg.Groups[0].Name)
+	})
+
+	t.Run("duplicate group error", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{{Name: "existing"}}}
+		err := cfg.AddGroup("existing")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "group already exists")
+	})
+}
+
+func TestConfig_DeleteGroup(t *testing.T) {
+	t.Run("delete existing group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{{Name: "todelete"}, {Name: "keep"}}}
+		err := cfg.DeleteGroup("todelete")
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups, 1)
+		assert.Equal(t, "keep", cfg.Groups[0].Name)
+	})
+
+	t.Run("delete nonexistent group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.DeleteGroup("nonexistent")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "group not found")
+	})
+}
+
+func TestConfig_RenameGroup(t *testing.T) {
+	t.Run("rename existing group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{{Name: "oldname"}}}
+		err := cfg.RenameGroup("oldname", "newname")
+		require.NoError(t, err)
+		assert.Equal(t, "newname", cfg.Groups[0].Name)
+	})
+
+	t.Run("rename to existing name error", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{{Name: "a"}, {Name: "b"}}}
+		err := cfg.RenameGroup("a", "b")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "group already exists")
+	})
+
+	t.Run("rename nonexistent group", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.RenameGroup("nonexistent", "newname")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "group not found")
+	})
+}
+
+func TestConfig_GetGroups(t *testing.T) {
+	cfg := &Config{Groups: []Group{{Name: "a"}, {Name: "b"}, {Name: "c"}}}
+	groups := cfg.GetGroups()
+	assert.Equal(t, []string{"a", "b", "c"}, groups)
+}
+
+func TestConfig_DeleteHost(t *testing.T) {
+	t.Run("delete existing host", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{
+					{Domain: "a.com", Alias: "a"},
+					{Domain: "b.com", Alias: "b"},
+				}},
+			},
+		}
+		result := cfg.DeleteHost("a")
+		assert.True(t, result)
+		assert.Len(t, cfg.Groups[0].Hosts, 1)
+		assert.Equal(t, "b", cfg.Groups[0].Hosts[0].Alias)
+	})
+
+	t.Run("delete nonexistent host", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		result := cfg.DeleteHost("nonexistent")
+		assert.False(t, result)
+	})
+}
+
+func TestConfig_UpdateHost(t *testing.T) {
+	t.Run("update in same group", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{{Domain: "old.com", IP: "127.0.0.1", Alias: "test"}}},
+			},
+		}
+		err := cfg.UpdateHost("test", "new.com", "192.168.1.1", "test", "dev")
+		require.NoError(t, err)
+		assert.Equal(t, "new.com", cfg.Groups[0].Hosts[0].Domain)
+		assert.Equal(t, "192.168.1.1", cfg.Groups[0].Hosts[0].IP)
+	})
+
+	t.Run("move to different group", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "source", Hosts: []Host{{Domain: "a.com", IP: "127.0.0.1", Alias: "test"}}},
+				{Name: "target", Hosts: []Host{}},
+			},
+		}
+		err := cfg.UpdateHost("test", "a.com", "127.0.0.1", "test", "target")
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups[0].Hosts, 0)
+		assert.Len(t, cfg.Groups[1].Hosts, 1)
+	})
+
+	t.Run("move to new group", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "source", Hosts: []Host{{Domain: "a.com", IP: "127.0.0.1", Alias: "test"}}},
+			},
+		}
+		err := cfg.UpdateHost("test", "a.com", "127.0.0.1", "test", "newgroup")
+		require.NoError(t, err)
+		assert.Len(t, cfg.Groups, 2)
+		assert.Equal(t, "newgroup", cfg.Groups[1].Name)
+	})
+
+	t.Run("change alias", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{{Domain: "a.com", IP: "127.0.0.1", Alias: "old"}}},
+			},
+		}
+		err := cfg.UpdateHost("old", "a.com", "127.0.0.1", "new", "dev")
+		require.NoError(t, err)
+		assert.Equal(t, "new", cfg.Groups[0].Hosts[0].Alias)
+	})
+
+	t.Run("alias conflict error", func(t *testing.T) {
+		cfg := &Config{
+			Groups: []Group{
+				{Name: "dev", Hosts: []Host{
+					{Domain: "a.com", Alias: "a"},
+					{Domain: "b.com", Alias: "b"},
+				}},
+			},
+		}
+		err := cfg.UpdateHost("a", "a.com", "127.0.0.1", "b", "dev")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "alias already exists")
+	})
+
+	t.Run("host not found error", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		err := cfg.UpdateHost("nonexistent", "a.com", "127.0.0.1", "new", "dev")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "alias not found")
+	})
+}
+
+func TestConfig_AddPreset(t *testing.T) {
+	t.Run("add new preset", func(t *testing.T) {
+		cfg := &Config{Presets: []Preset{}}
+		err := cfg.AddPreset("newpreset", []string{"a"}, []string{"b"})
+		require.NoError(t, err)
+		assert.Len(t, cfg.Presets, 1)
+		assert.Equal(t, "newpreset", cfg.Presets[0].Name)
+	})
+
+	t.Run("duplicate preset error", func(t *testing.T) {
+		cfg := &Config{Presets: []Preset{{Name: "existing"}}}
+		err := cfg.AddPreset("existing", nil, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "preset already exists")
+	})
+}
+
+func TestConfig_DeletePreset(t *testing.T) {
+	t.Run("delete existing preset", func(t *testing.T) {
+		cfg := &Config{Presets: []Preset{{Name: "todelete"}, {Name: "keep"}}}
+		err := cfg.DeletePreset("todelete")
+		require.NoError(t, err)
+		assert.Len(t, cfg.Presets, 1)
+		assert.Equal(t, "keep", cfg.Presets[0].Name)
+	})
+
+	t.Run("delete nonexistent preset", func(t *testing.T) {
+		cfg := &Config{Presets: []Preset{}}
+		err := cfg.DeletePreset("nonexistent")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "preset not found")
+	})
+}
+
+func TestConfig_GetPresets(t *testing.T) {
+	cfg := &Config{Presets: []Preset{{Name: "a"}, {Name: "b"}}}
+	presets := cfg.GetPresets()
+	assert.Len(t, presets, 2)
+}
+
+func TestConfig_EnsureDefaultGroup(t *testing.T) {
+	t.Run("creates default when empty", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{}}
+		cfg.EnsureDefaultGroup()
+		assert.Len(t, cfg.Groups, 1)
+		assert.Equal(t, "default", cfg.Groups[0].Name)
+	})
+
+	t.Run("does nothing when groups exist", func(t *testing.T) {
+		cfg := &Config{Groups: []Group{{Name: "existing"}}}
+		cfg.EnsureDefaultGroup()
+		assert.Len(t, cfg.Groups, 1)
+		assert.Equal(t, "existing", cfg.Groups[0].Name)
+	})
+}
+
+func TestManager_Watch(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	err := CreateDefault(configPath)
+	require.NoError(t, err)
+
+	manager := NewManager(configPath)
+	err = manager.Load()
+	require.NoError(t, err)
+
+	changeCh := make(chan *Config, 1)
+	err = manager.Watch(func(cfg *Config) {
+		changeCh <- cfg
+	})
+	require.NoError(t, err)
+
+	// Stop the watcher
+	manager.Stop()
+}
+
+func TestManager_Save_NoConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	manager := NewManager(configPath)
+	// Don't load, so config is nil
+	err := manager.Save()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no config loaded")
+}
