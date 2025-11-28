@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>lolcathost - Dynamic Hosts File Manager</title>
+        <meta
+            name="description"
+            content="Dynamic hosts file manager with interactive terminal UI. Live add, edit, delete host entries. Auto-backup, groups, presets, and daemon-based architecture."
+        />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                darkMode: 'class'
+            }
+        </script>
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body { font-family: "Inter", sans-serif; }
+            code, pre { font-family: "JetBrains Mono", monospace; }
+            .theme-transition {
+                transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+            }
+            @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes float {
+                0%, 100% { transform: translateY(0px); }
+                50% { transform: translateY(-10px); }
+            }
+            .animate-fade-in-up { animation: fadeInUp 0.6s ease-out; }
+            .animate-float { animation: float 3s ease-in-out infinite; }
+            .glass {
+                background: rgba(255, 255, 255, 0.7);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+            .dark .glass {
+                background: rgba(17, 24, 39, 0.7);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .gradient-text {
+                background: linear-gradient(135deg, #f472b6 0%, #c084fc 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .dark .gradient-text {
+                background: linear-gradient(135deg, #f9a8d4 0%, #d8b4fe 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .shadow-modern { box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1); }
+            .dark .shadow-modern { box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.4); }
+            html { scroll-behavior: smooth; }
+        </style>
+        <script>
+            if (localStorage.theme === "dark" || (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+                document.documentElement.classList.add("dark");
+            } else {
+                document.documentElement.classList.remove("dark");
+            }
+        </script>
+    </head>
+    <body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 theme-transition">
+        <!-- Navigation -->
+        <nav class="fixed w-full glass shadow-modern z-50 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="flex justify-between h-16 items-center">
+                    <a href="#" class="flex items-center hover:opacity-80 transition-opacity duration-300 gap-2">
+                        <img src="lolcathost.png" alt="lolcathost logo" class="h-10">
+                        <span class="text-2xl font-bold gradient-text">lolcathost</span>
+                    </a>
+                    <div class="hidden md:flex space-x-6">
+                        <a href="#features" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Features</a>
+                        <a href="#installation" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Installation</a>
+                        <a href="#usage" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Usage</a>
+                        <a href="#configuration" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">Configuration</a>
+                        <a href="#cli" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">CLI</a>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button id="theme-toggle" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle theme">
+                            <i class="fas fa-moon dark:hidden text-xl"></i>
+                            <i class="fas fa-sun hidden dark:inline text-xl"></i>
+                        </button>
+                        <a href="https://github.com/lukaszraczylo/lolcathost" target="_blank" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="View on GitHub">
+                            <i class="fab fa-github text-xl"></i>
+                        </a>
+                        <button id="mobile-menu-toggle" class="md:hidden text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Toggle menu">
+                            <i class="fas fa-bars text-xl" id="menu-open-icon"></i>
+                            <i class="fas fa-times text-xl hidden" id="menu-close-icon"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="mobile-menu" class="hidden md:hidden border-t border-gray-200 dark:border-gray-700">
+                <div class="px-4 py-3 space-y-1 bg-white dark:bg-gray-800">
+                    <a href="#features" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Features</a>
+                    <a href="#installation" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Installation</a>
+                    <a href="#usage" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Usage</a>
+                    <a href="#configuration" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">Configuration</a>
+                    <a href="#cli" class="block px-3 py-3 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 rounded font-medium">CLI</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="relative pt-24 sm:pt-32 pb-12 sm:pb-20 overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 dark:from-gray-900 dark:via-pink-900/20 dark:to-purple-900/20 theme-transition"></div>
+            <div class="absolute top-0 -left-4 w-72 h-72 bg-pink-300 dark:bg-pink-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float"></div>
+            <div class="absolute top-0 -right-4 w-72 h-72 bg-purple-300 dark:bg-purple-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float" style="animation-delay: 1s;"></div>
+            <div class="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-300 dark:bg-indigo-500 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-float" style="animation-delay: 2s;"></div>
+
+            <div class="relative max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center">
+                    <div class="mb-2 sm:mb-4 flex justify-center animate-fade-in-up">
+                        <img src="lolcathost.png" alt="lolcathost logo" class="h-40 sm:h-48 md:h-56 animate-float">
+                    </div>
+                    <div class="mb-8 sm:mb-10 flex justify-center animate-fade-in-up">
+                        <div class="text-7xl sm:text-8xl md:text-9xl font-bold gradient-text">lolcathost</div>
+                    </div>
+                    <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-gray-100 mb-4 sm:mb-6 leading-tight animate-fade-in-up" style="animation-delay: 0.1s;">
+                        Dynamic Hosts File<br /><span class="gradient-text">Manager</span>
+                    </h1>
+                    <p class="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 sm:mb-10 max-w-2xl mx-auto leading-relaxed px-4 animate-fade-in-up" style="animation-delay: 0.2s;">
+                        Terminal interface for managing your /etc/hosts file with automatic backups, groups, presets, and a secure daemon architecture.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-8 sm:mb-12 px-4 animate-fade-in-up" style="animation-delay: 0.3s;">
+                        <a href="#installation" class="group relative bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-8 py-3 rounded-lg font-medium transition-all duration-300 min-h-[48px] flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105">
+                            <span class="relative z-10">Get Started</span>
+                        </a>
+                        <a href="https://github.com/lukaszraczylo/lolcathost" class="group glass hover:shadow-lg text-gray-900 dark:text-gray-100 px-8 py-3 rounded-lg font-medium transition-all duration-300 min-h-[48px] flex items-center justify-center hover:scale-105">
+                            <i class="fab fa-github mr-2"></i>View on GitHub
+                        </a>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-2 sm:gap-4 text-sm px-4">
+                        <img src="https://img.shields.io/github/v/release/lukaszraczylo/lolcathost" alt="Version" class="h-5" />
+                        <img src="https://img.shields.io/github/license/lukaszraczylo/lolcathost" alt="License" class="h-5" />
+                        <img src="https://goreportcard.com/badge/github.com/lukaszraczylo/lolcathost" alt="Go Report" class="h-5" />
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features" class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Features</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Everything you need for managing local host entries</p>
+                </div>
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-terminal text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Interactive TUI</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Beautiful terminal interface with real-time updates and keyboard navigation</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-magic text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Live Management</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Add, edit, delete, and toggle host entries without restarting</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-layer-group text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Groups</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Organize hosts into groups for better management</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-bookmark text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Presets</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Save and apply preset configurations with a single command</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-history text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Auto-Backup</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Automatic backups before every change with rollback support</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-shield-alt text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Secure Daemon</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Privileged daemon handles file access via Unix socket IPC</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-ban text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Domain Blocking</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Configurable domain blocklist to prevent dangerous entries</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fab fa-apple text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">Cross-Platform</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Works on macOS (LaunchDaemon) and Linux (systemd)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-xl group hover:shadow-lg transition-all duration-300">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-code text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1">CLI & TUI</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Both command-line and interactive modes for flexibility</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Installation Section -->
+        <section id="installation" class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Installation</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Get started in under a minute</p>
+                </div>
+                <div class="max-w-3xl mx-auto space-y-6">
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <i class="fas fa-download mr-2 text-pink-500"></i>
+                            Quick Install
+                        </h3>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto"><code>curl -fsSL https://raw.githubusercontent.com/lukaszraczylo/lolcathost/main/install.sh | bash</code></pre>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <i class="fas fa-code-branch mr-2 text-purple-500"></i>
+                            Build from Source
+                        </h3>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto"><code>git clone https://github.com/lukaszraczylo/lolcathost.git
+cd lolcathost
+make build
+sudo ./build/lolcathost --install</code></pre>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                            <i class="fas fa-cog mr-2 text-indigo-500"></i>
+                            Post-Installation
+                        </h3>
+                        <p class="text-gray-600 dark:text-gray-400 mb-3">The installer will:</p>
+                        <ul class="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1">
+                            <li>Install the binary to <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/usr/local/bin/lolcathost</code></li>
+                            <li>Create a LaunchDaemon (macOS) or systemd service (Linux)</li>
+                            <li>Start the daemon automatically</li>
+                            <li>Create the default config at <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/.config/lolcathost/config.yaml</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Usage Section -->
+        <section id="usage" class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Usage</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Simple and intuitive interface</p>
+                </div>
+                <div class="max-w-4xl mx-auto">
+                    <div class="glass p-6 rounded-xl mb-6">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-4">Interactive Mode (TUI)</h3>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto mb-4"><code>lolcathost</code></pre>
+                        <h4 class="font-medium text-gray-900 dark:text-gray-100 mb-3">Keyboard Controls</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Key</th>
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-gray-600 dark:text-gray-400">
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">up/down</code> or <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">j/k</code></td>
+                                        <td class="py-2 px-3">Navigate entries</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">Space</code> or <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">Enter</code></td>
+                                        <td class="py-2 px-3">Toggle entry enabled/disabled</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">n</code></td>
+                                        <td class="py-2 px-3">Add new host entry</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">e</code></td>
+                                        <td class="py-2 px-3">Edit selected entry</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">d</code></td>
+                                        <td class="py-2 px-3">Delete selected entry</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">p</code></td>
+                                        <td class="py-2 px-3">Open preset picker</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/</code></td>
+                                        <td class="py-2 px-3">Search</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">r</code></td>
+                                        <td class="py-2 px-3">Refresh list</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">?</code></td>
+                                        <td class="py-2 px-3">Show help</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">q</code></td>
+                                        <td class="py-2 px-3">Quit</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Status Indicators</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Indicator</th>
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-gray-600 dark:text-gray-400">
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><span class="text-emerald-500 font-bold">&#9679; Active</span></td>
+                                        <td class="py-2 px-3">Entry is enabled and in /etc/hosts</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><span class="text-gray-400 font-bold">&#9675; Disabled</span></td>
+                                        <td class="py-2 px-3">Entry is disabled</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><span class="text-yellow-500 font-bold">&#9684; Pending</span></td>
+                                        <td class="py-2 px-3">Operation in progress</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 px-3"><span class="text-red-500 font-bold">&#10007; Error</span></td>
+                                        <td class="py-2 px-3">Operation failed</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Configuration Section -->
+        <section id="configuration" class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Configuration</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Flexible YAML-based configuration</p>
+                </div>
+                <div class="max-w-4xl mx-auto">
+                    <div class="glass p-6 rounded-xl mb-6">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Config File Location</h3>
+                        <p class="text-gray-600 dark:text-gray-400 mb-2">Default: <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">~/.config/lolcathost/config.yaml</code></p>
+                    </div>
+                    <div class="glass p-6 rounded-xl mb-6">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Example Configuration</h3>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm"><code># Groups for organizing host entries
+groups:
+  - name: development
+    hosts:
+      - domain: myapp.local
+        ip: 127.0.0.1
+        enabled: true
+      - domain: api.myapp.local
+        ip: 127.0.0.1
+        enabled: true
+
+  - name: staging
+    hosts:
+      - domain: staging.example.com
+        ip: 192.168.1.100
+        enabled: false
+
+# Presets for quick configuration switching
+presets:
+  - name: work
+    enable:
+      - myapp.local
+      - api.myapp.local
+    disable:
+      - staging.example.com
+
+  - name: testing
+    enable:
+      - staging.example.com
+    disable:
+      - myapp.local
+
+# Domain blocklist (prevent adding these domains)
+blocklist:
+  - google.com
+  - facebook.com
+  - github.com</code></pre>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Host Entry Fields</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Field</th>
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Required</th>
+                                        <th class="text-left py-2 px-3 text-gray-900 dark:text-gray-100">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-gray-600 dark:text-gray-400">
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">domain</code></td>
+                                        <td class="py-2 px-3">Yes</td>
+                                        <td class="py-2 px-3">The hostname (e.g., myapp.local)</td>
+                                    </tr>
+                                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">ip</code></td>
+                                        <td class="py-2 px-3">Yes</td>
+                                        <td class="py-2 px-3">IP address to resolve to</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 px-3"><code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">enabled</code></td>
+                                        <td class="py-2 px-3">No</td>
+                                        <td class="py-2 px-3">Whether entry is active (default: false)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CLI Section -->
+        <section id="cli" class="py-12 sm:py-16 md:py-20 bg-white dark:bg-gray-900 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">CLI Commands</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Scriptable command-line interface</p>
+                </div>
+                <div class="max-w-4xl mx-auto space-y-4">
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost list</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">List all host entries</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost enable &lt;alias&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Enable a host entry by its alias</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost disable &lt;alias&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Disable a host entry by its alias</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost add -d &lt;domain&gt; -i &lt;ip&gt; -g &lt;group&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Add a new host entry</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost delete &lt;alias&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Delete a host entry by its alias</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost preset &lt;name&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Apply a named preset</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost rollback &lt;backup&gt;</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Restore from a backup</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">lolcathost status</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Show daemon status</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">sudo lolcathost --install</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Install the daemon service</p>
+                    </div>
+                    <div class="glass p-5 rounded-xl">
+                        <div class="flex items-center justify-between mb-2">
+                            <code class="text-pink-500 dark:text-pink-400 font-semibold">sudo lolcathost --uninstall</code>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm">Uninstall the daemon service</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Architecture Section -->
+        <section class="py-12 sm:py-16 md:py-20 bg-gray-50 dark:bg-gray-800 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="text-center mb-8 sm:mb-12">
+                    <h2 class="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4">Architecture</h2>
+                    <p class="text-base sm:text-lg text-gray-600 dark:text-gray-300 px-4">Secure daemon-based design</p>
+                </div>
+                <div class="max-w-4xl mx-auto">
+                    <div class="glass p-6 rounded-xl">
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                                    <i class="fas fa-server mr-2 text-pink-500"></i>
+                                    Daemon
+                                </h3>
+                                <ul class="text-gray-600 dark:text-gray-400 space-y-2 text-sm">
+                                    <li>&#8226; Runs as root (LaunchDaemon/systemd)</li>
+                                    <li>&#8226; Handles /etc/hosts modifications</li>
+                                    <li>&#8226; Creates automatic backups</li>
+                                    <li>&#8226; Validates inputs (domain, IP)</li>
+                                    <li>&#8226; Rate limiting protection</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
+                                    <i class="fas fa-user mr-2 text-purple-500"></i>
+                                    Client (CLI/TUI)
+                                </h3>
+                                <ul class="text-gray-600 dark:text-gray-400 space-y-2 text-sm">
+                                    <li>&#8226; Runs as regular user</li>
+                                    <li>&#8226; Connects via Unix socket</li>
+                                    <li>&#8226; JSON protocol for commands</li>
+                                    <li>&#8226; No sudo required for operations</li>
+                                    <li>&#8226; Real-time status updates</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                            <p class="text-gray-600 dark:text-gray-400 text-sm text-center">
+                                <i class="fas fa-lock mr-1 text-emerald-500"></i>
+                                Socket: <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">/var/run/lolcathost.sock</code>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="py-8 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 theme-transition">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <img src="lolcathost.png" alt="lolcathost logo" class="h-8">
+                        <span class="text-xl font-bold gradient-text">lolcathost</span>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <a href="https://github.com/lukaszraczylo/lolcathost" class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
+                            <i class="fab fa-github text-xl"></i>
+                        </a>
+                        <a href="https://github.com/lukaszraczylo/lolcathost/issues" class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 text-sm">Issues</a>
+                        <a href="https://github.com/lukaszraczylo/lolcathost/releases" class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 text-sm">Releases</a>
+                    </div>
+                    <p class="text-gray-500 dark:text-gray-400 text-sm">MIT License</p>
+                </div>
+            </div>
+        </footer>
+
+        <script>
+            // Theme toggle
+            document.getElementById('theme-toggle').addEventListener('click', function() {
+                if (document.documentElement.classList.contains('dark')) {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.theme = 'light';
+                } else {
+                    document.documentElement.classList.add('dark');
+                    localStorage.theme = 'dark';
+                }
+            });
+
+            // Mobile menu toggle
+            document.getElementById('mobile-menu-toggle').addEventListener('click', function() {
+                const menu = document.getElementById('mobile-menu');
+                const openIcon = document.getElementById('menu-open-icon');
+                const closeIcon = document.getElementById('menu-close-icon');
+
+                menu.classList.toggle('hidden');
+                openIcon.classList.toggle('hidden');
+                closeIcon.classList.toggle('hidden');
+            });
+
+            // Close mobile menu on link click
+            document.querySelectorAll('#mobile-menu a').forEach(link => {
+                link.addEventListener('click', function() {
+                    document.getElementById('mobile-menu').classList.add('hidden');
+                    document.getElementById('menu-open-icon').classList.remove('hidden');
+                    document.getElementById('menu-close-icon').classList.add('hidden');
+                });
+            });
+        </script>
+    </body>
+</html>

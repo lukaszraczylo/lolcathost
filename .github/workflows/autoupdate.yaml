@@ -1,0 +1,47 @@
+name: AutoUpdate
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: Install dependencies
+        run: go get ./...
+
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    container: golang:1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y ca-certificates make
+
+      - name: Tidy and update modules
+        run: |
+          go mod tidy
+          go get -u -v ./...
+
+      - name: Run tests
+        run: CI_RUN=${CI} go test -v ./...
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update go.mod and go.sum"
+          file_pattern: "go.mod go.sum"
