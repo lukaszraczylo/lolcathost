@@ -174,7 +174,7 @@ func (b *BackupPicker) selectView() string {
 	}
 
 	leftSb.WriteString("\n")
-	leftSb.WriteString(helpDescStyle.Render("↑↓ navigate • Enter restore • Esc cancel"))
+	leftSb.WriteString(WrapHelpText("↑↓ navigate • Enter restore • Esc cancel", 40))
 
 	// Build right panel (preview)
 	var rightSb strings.Builder
@@ -219,7 +219,8 @@ func (b *BackupPicker) selectView() string {
 		// Show scroll indicator
 		if len(lines) > previewHeight {
 			rightSb.WriteString("\n")
-			rightSb.WriteString(helpDescStyle.Render(fmt.Sprintf("Lines %d-%d of %d (Shift+↑↓ scroll)", b.previewScroll+1, endLine, len(lines))))
+			scrollText := fmt.Sprintf("%d-%d of %d (↑↓ scroll)", b.previewScroll+1, endLine, len(lines))
+			rightSb.WriteString(helpDescStyle.Render(scrollText))
 		}
 	}
 

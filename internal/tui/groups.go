@@ -190,7 +190,7 @@ func (g *GroupPicker) selectView() string {
 	}
 
 	sb.WriteString("\n\n")
-	sb.WriteString(helpDescStyle.Render("↑↓ navigate • n new • r rename • d delete • Esc back"))
+	sb.WriteString(WrapHelpText("↑↓ navigate • n new • r rename • d delete • Esc back", g.width-6))
 
 	return dialogStyle.Render(sb.String())
 }

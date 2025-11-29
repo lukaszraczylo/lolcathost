@@ -920,8 +920,15 @@ func (m *Model) View() string {
 	currentContent := sb.String()
 	currentLines := strings.Count(currentContent, "\n") + 1
 
-	// Fill space to push footer to bottom (reserve 3 lines for footer)
-	footerHeight := 3
+	// Calculate footer height dynamically (help bar lines + status bar + spacing)
+	footerHeight := 2 // status bar + newline before it
+	var helpBarContent string
+	if m.mode == ViewList {
+		helpBarContent = m.helpBar()
+		helpBarLines := strings.Count(helpBarContent, "\n") + 1
+		footerHeight += helpBarLines + 1 // +1 for newline before help bar
+	}
+
 	remainingLines := m.height - currentLines - footerHeight
 	if remainingLines > 0 {
 		sb.WriteString(strings.Repeat("\n", remainingLines))
@@ -930,7 +937,7 @@ func (m *Model) View() string {
 	// Footer (help bar + status bar)
 	if m.mode == ViewList {
 		sb.WriteString("\n")
-		sb.WriteString(m.helpBar())
+		sb.WriteString(helpBarContent)
 	}
 	sb.WriteString("\n")
 	sb.WriteString(m.statusBar())
@@ -939,19 +946,67 @@ func (m *Model) View() string {
 }
 
 func (m *Model) helpBar() string {
-	return helpBarStyle.Render(fmt.Sprintf("%s/%s: Navigate  %s: Toggle  %s: New  %s: Edit  %s: Delete  %s: Presets  %s: Groups  %s: Backups  %s: Search  %s: Help  %s: Quit",
-		helpKeyStyle.Render("↑↓"),
-		helpKeyStyle.Render("jk"),
-		helpKeyStyle.Render("Space"),
-		helpKeyStyle.Render("n"),
-		helpKeyStyle.Render("e"),
-		helpKeyStyle.Render("d"),
-		helpKeyStyle.Render("p"),
-		helpKeyStyle.Render("g"),
-		helpKeyStyle.Render("b"),
-		helpKeyStyle.Render("/"),
-		helpKeyStyle.Render("?"),
-		helpKeyStyle.Render("q")))
+	// Define help items with their display widths (without ANSI codes)
+	type helpItem struct {
+		key      string
+		desc     string
+		rawWidth int // width without ANSI escape codes
+	}
+
+	items := []helpItem{
+		{"↑↓/jk", "Navigate", 13},
+		{"Space", "Toggle", 13},
+		{"n", "New", 6},
+		{"e", "Edit", 7},
+		{"d", "Delete", 9},
+		{"p", "Presets", 10},
+		{"g", "Groups", 9},
+		{"b", "Backups", 10},
+		{"/", "Search", 9},
+		{"?", "Help", 7},
+		{"q", "Quit", 7},
+	}
+
+	separator := "  "
+	sepWidth := 2
+
+	var lines []string
+	var currentLine string
+	var currentWidth int
+
+	for i, item := range items {
+		rendered := helpKeyStyle.Render(item.key) + ": " + item.desc
+
+		// Check if adding this item would exceed width
+		newWidth := currentWidth + item.rawWidth
+		if currentWidth > 0 {
+			newWidth += sepWidth
+		}
+
+		if m.width > 0 && newWidth > m.width && currentWidth > 0 {
+			// Start a new line
+			lines = append(lines, currentLine)
+			currentLine = rendered
+			currentWidth = item.rawWidth
+		} else {
+			// Add to current line
+			if currentWidth > 0 {
+				currentLine += separator
+			}
+			currentLine += rendered
+			currentWidth = newWidth
+			if i == 0 {
+				currentWidth = item.rawWidth
+			}
+		}
+	}
+
+	// Add the last line
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return helpBarStyle.Render(strings.Join(lines, "\n"))
 }
 
 func (m *Model) statusBar() string {

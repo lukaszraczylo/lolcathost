@@ -411,7 +411,7 @@ func (p *PresetPicker) selectView() string {
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(helpDescStyle.Render("↑↓ navigate • Enter apply • n new • e edit • d delete • Esc cancel"))
+	sb.WriteString(WrapHelpText("↑↓ navigate • Enter apply • n new • e edit • d delete • Esc cancel", p.width-6))
 
 	return dialogStyle.Render(sb.String())
 }
@@ -483,7 +483,7 @@ func (p *PresetPicker) formView() string {
 	}
 	sb.WriteString("\n\n")
 
-	sb.WriteString(helpDescStyle.Render("Tab/↓ next • Enter select/save • Esc cancel"))
+	sb.WriteString(WrapHelpText("Tab/↓ next • Enter select/save • Esc cancel", p.width-6))
 
 	return dialogStyle.Render(sb.String())
 }
@@ -536,7 +536,7 @@ func (p *PresetPicker) pickerView() string {
 
 	sb.WriteString(titleStyle.Render(title))
 	sb.WriteString("\n")
-	sb.WriteString(helpDescStyle.Render("Space to toggle • Enter to confirm • Esc to cancel"))
+	sb.WriteString(WrapHelpText("Space to toggle • Enter to confirm • Esc to cancel", p.width-6))
 	sb.WriteString("\n\n")
 
 	filtered := p.getFilteredAliases()

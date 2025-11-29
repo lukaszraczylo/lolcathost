@@ -2,6 +2,8 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -147,4 +149,72 @@ func StatusText(enabled bool, pending bool, hasError bool) string {
 // HelpItem formats a help item.
 func HelpItem(key, desc string) string {
 	return helpKeyStyle.Render(key) + " " + helpDescStyle.Render(desc)
+}
+
+// WrapHelpText wraps help text to fit within maxWidth, splitting on bullet separators.
+// If maxWidth is 0 or negative, returns the original text.
+func WrapHelpText(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return helpDescStyle.Render(text)
+	}
+
+	separator := " • "
+	parts := splitOnSeparator(text, separator)
+
+	var lines []string
+	var currentLine string
+	var currentWidth int
+
+	for i, part := range parts {
+		partWidth := len(part)
+		sepWidth := 3 // len(" • ")
+
+		newWidth := currentWidth + partWidth
+		if currentWidth > 0 {
+			newWidth += sepWidth
+		}
+
+		if newWidth > maxWidth && currentWidth > 0 {
+			lines = append(lines, currentLine)
+			currentLine = part
+			currentWidth = partWidth
+		} else {
+			if currentWidth > 0 {
+				currentLine += separator
+			}
+			currentLine += part
+			if i == 0 {
+				currentWidth = partWidth
+			} else {
+				currentWidth = newWidth
+			}
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	// Apply style to each line and join
+	var result []string
+	for _, line := range lines {
+		result = append(result, helpDescStyle.Render(line))
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// splitOnSeparator splits a string on the given separator.
+func splitOnSeparator(s, sep string) []string {
+	var parts []string
+	for {
+		idx := strings.Index(s, sep)
+		if idx == -1 {
+			parts = append(parts, s)
+			break
+		}
+		parts = append(parts, s[:idx])
+		s = s[idx+len(sep):]
+	}
+	return parts
 }

@@ -291,7 +291,7 @@ func (f *Form) View() string {
 	sb.WriteString("\n\n")
 
 	sb.WriteString("\n")
-	sb.WriteString(helpDescStyle.Render("Tab/↓ next • Shift+Tab/↑ prev • ←→ select group • Enter save • Esc cancel"))
+	sb.WriteString(WrapHelpText("Tab/↓ next • Shift+Tab/↑ prev • ←→ select group • Enter save • Esc cancel", f.width-6))
 
 	return dialogStyle.Render(sb.String())
 }
