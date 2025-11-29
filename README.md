@@ -53,7 +53,7 @@ lolcathost manages your `/etc/hosts` file with an interactive terminal interface
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install lukaszraczylo/brew-taps/lolcathost
+brew install lukaszraczylo/taps/lolcathost
 ```
 
 After Homebrew installation, run:

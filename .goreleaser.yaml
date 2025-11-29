@@ -52,7 +52,7 @@ release:
 brews:
   - repository:
       owner: lukaszraczylo
-      name: brew-taps
+      name: homebrew-taps
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     homepage: https://github.com/lukaszraczylo/lolcathost
