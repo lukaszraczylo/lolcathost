@@ -407,3 +407,72 @@ func BenchmarkListView_View(b *testing.B) {
 		_ = lv.View()
 	}
 }
+
+func TestListView_DeleteSimulation(t *testing.T) {
+	lv := NewListView()
+
+	// Initial entries
+	entries := []protocol.HostEntry{
+		{Domain: "a.com", IP: "127.0.0.1", Alias: "a", Enabled: true, Group: "dev"},
+		{Domain: "b.com", IP: "127.0.0.1", Alias: "b", Enabled: false, Group: "dev"},
+		{Domain: "c.com", IP: "192.168.1.1", Alias: "c", Enabled: true, Group: "staging"},
+	}
+	lv.SetItems(entries)
+	require.Equal(t, 3, lv.Len())
+
+	// Select the second item
+	lv.MoveDown()
+	selected := lv.Selected()
+	require.NotNil(t, selected)
+	require.Equal(t, "b", selected.Entry.Alias)
+
+	// Simulate delete: set new items without the deleted entry
+	entriesAfterDelete := []protocol.HostEntry{
+		{Domain: "a.com", IP: "127.0.0.1", Alias: "a", Enabled: true, Group: "dev"},
+		{Domain: "c.com", IP: "192.168.1.1", Alias: "c", Enabled: true, Group: "staging"},
+	}
+	lv.SetItems(entriesAfterDelete)
+
+	// Verify list has only 2 items now
+	assert.Equal(t, 2, lv.Len())
+
+	// Verify "b" is no longer in the list
+	for i := 0; i < lv.Len(); i++ {
+		assert.NotEqual(t, "b", lv.items[i].Entry.Alias, "deleted entry should not be in list")
+	}
+
+	// Cursor should be adjusted if needed
+	assert.LessOrEqual(t, lv.cursor, lv.Len()-1)
+}
+
+func TestListView_SetItemsWithNil(t *testing.T) {
+	lv := NewListView()
+
+	// Initial entries
+	entries := []protocol.HostEntry{
+		{Domain: "a.com", IP: "127.0.0.1", Alias: "a", Enabled: true, Group: "dev"},
+	}
+	lv.SetItems(entries)
+	require.Equal(t, 1, lv.Len())
+
+	// Set nil entries (simulating empty list from server)
+	lv.SetItems(nil)
+	assert.Equal(t, 0, lv.Len())
+	assert.Equal(t, 0, lv.cursor)
+}
+
+func TestListView_SetItemsWithEmptySlice(t *testing.T) {
+	lv := NewListView()
+
+	// Initial entries
+	entries := []protocol.HostEntry{
+		{Domain: "a.com", IP: "127.0.0.1", Alias: "a", Enabled: true, Group: "dev"},
+	}
+	lv.SetItems(entries)
+	require.Equal(t, 1, lv.Len())
+
+	// Set empty slice
+	lv.SetItems([]protocol.HostEntry{})
+	assert.Equal(t, 0, lv.Len())
+	assert.Equal(t, 0, lv.cursor)
+}

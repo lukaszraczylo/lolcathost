@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lukaszraczylo/lolcathost/internal/client"
 	"github.com/lukaszraczylo/lolcathost/internal/config"
@@ -27,6 +28,7 @@ const (
 	ViewBackups
 	ViewHelp
 	ViewSearch
+	ViewConfirmDelete
 )
 
 // Model is the main Bubble Tea model.
@@ -45,13 +47,14 @@ type Model struct {
 	searchInput  textinput.Model
 
 	// State
-	width        int
-	height       int
-	message      string
-	messageStyle string // "error" or "success"
-	messageTime  time.Time
-	searchTerm   string
-	allGroups    []string // All groups including empty ones
+	width              int
+	height             int
+	message            string
+	messageStyle       string // "error" or "success"
+	messageTime        time.Time
+	searchTerm         string
+	allGroups          []string // All groups including empty ones
+	pendingDeleteAlias string   // Alias of host pending delete confirmation
 
 	// Update notification
 	updateAvailable bool
@@ -352,7 +355,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Mark as disconnected to trigger reconnect
 			m.connected = false
 			m.client.Close()
-		} else if msg.entries != nil {
+		} else {
+			// Always update the list, even if entries is nil/empty
 			m.list.SetItems(msg.entries)
 		}
 
@@ -385,7 +389,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mode = ViewList
 
 	case deleteMsg:
+		// Clear pending state regardless of success/failure
+		m.list.SetPending(msg.alias, false)
 		if msg.err != nil {
+			m.list.SetError(msg.alias, true)
 			m.setError(fmt.Sprintf("Delete failed: %v", msg.err))
 		} else {
 			cmds = append(cmds, m.refresh())
@@ -521,6 +528,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleHelpKey(msg)
 	case ViewSearch:
 		return m.handleSearchKey(msg)
+	case ViewConfirmDelete:
+		return m.handleConfirmDeleteKey(msg)
 	}
 
 	return nil
@@ -554,7 +563,8 @@ func (m *Model) handleListKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "d":
 		if item := m.list.Selected(); item != nil {
-			return m.deleteHost(item.Entry.Alias)
+			m.pendingDeleteAlias = item.Entry.Alias
+			m.mode = ViewConfirmDelete
 		}
 	case "p":
 		m.mode = ViewPresets
@@ -850,6 +860,23 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	return cmd
 }
 
+func (m *Model) handleConfirmDeleteKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y":
+		alias := m.pendingDeleteAlias
+		m.pendingDeleteAlias = ""
+		m.mode = ViewList
+		// Set pending state for visual feedback
+		m.list.SetPending(alias, true)
+		return m.deleteHost(alias)
+	case "n", "N", "esc":
+		m.pendingDeleteAlias = ""
+		m.mode = ViewList
+		return nil
+	}
+	return nil
+}
+
 func (m *Model) toggleSelected() tea.Cmd {
 	item := m.list.Selected()
 	if item == nil {
@@ -904,6 +931,8 @@ func (m *Model) View() string {
 		sb.WriteString(m.helpView())
 	case ViewSearch:
 		sb.WriteString(m.searchView())
+	case ViewConfirmDelete:
+		sb.WriteString(m.confirmDeleteView())
 	}
 
 	// Message
@@ -1073,6 +1102,36 @@ func (m *Model) searchView() string {
 	sb.WriteString(inputFocusStyle.Render(m.searchInput.View()))
 	sb.WriteString("\n\n")
 	sb.WriteString(helpDescStyle.Render("Enter to search • Esc to cancel"))
+
+	return dialogStyle.Render(sb.String())
+}
+
+func (m *Model) confirmDeleteView() string {
+	var sb strings.Builder
+
+	sb.WriteString(titleStyle.Render("Confirm Delete"))
+	sb.WriteString("\n\n")
+
+	// Find the entry details for the pending delete
+	var domain, ip string
+	for _, item := range m.list.items {
+		if item.Entry.Alias == m.pendingDeleteAlias {
+			domain = item.Entry.Domain
+			ip = item.Entry.IP
+			break
+		}
+	}
+
+	warningStyle := lipgloss.NewStyle().Foreground(colorWarning).Bold(true)
+	sb.WriteString(warningStyle.Render("Are you sure you want to delete this host?"))
+	sb.WriteString("\n\n")
+
+	sb.WriteString(fmt.Sprintf("  Alias:  %s\n", helpKeyStyle.Render(m.pendingDeleteAlias)))
+	sb.WriteString(fmt.Sprintf("  Domain: %s\n", helpDescStyle.Render(domain)))
+	sb.WriteString(fmt.Sprintf("  IP:     %s\n", helpDescStyle.Render(ip)))
+
+	sb.WriteString("\n")
+	sb.WriteString(helpDescStyle.Render("y confirm • n/Esc cancel"))
 
 	return dialogStyle.Render(sb.String())
 }

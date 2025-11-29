@@ -219,6 +219,21 @@ func TestServer_HandleDelete(t *testing.T) {
 		assert.Equal(t, "ok", resp.Status)
 	})
 
+	t.Run("verify deleted entry not in list", func(t *testing.T) {
+		// After delete, list should not contain the deleted entry
+		resp := server.handleList()
+		assert.Equal(t, "ok", resp.Status)
+
+		var data protocol.ListData
+		err := resp.ParseData(&data)
+		require.NoError(t, err)
+
+		// Check that the deleted entry is not in the list
+		for _, entry := range data.Entries {
+			assert.NotEqual(t, "todelete", entry.Alias, "deleted entry should not appear in list")
+		}
+	})
+
 	t.Run("delete nonexistent", func(t *testing.T) {
 		req, _ := protocol.NewRequest(protocol.RequestDelete, protocol.DeletePayload{
 			Alias: "nonexistent",
