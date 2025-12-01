@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   prepare:
@@ -47,7 +48,14 @@ jobs:
         run: git config --global --add safe.directory /__w/lolcathost/lolcathost
 
       - name: Commit changes
+        id: auto-commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update go.mod and go.sum"
           file_pattern: "go.mod go.sum"
+
+      - name: Trigger release workflow
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        run: gh workflow run release.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
