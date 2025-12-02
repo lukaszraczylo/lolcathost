@@ -146,11 +146,6 @@ func StatusText(enabled bool, pending bool, hasError bool) string {
 	return disabledStyle.Render("○ Disabled")
 }
 
-// HelpItem formats a help item.
-func HelpItem(key, desc string) string {
-	return helpKeyStyle.Render(key) + " " + helpDescStyle.Render(desc)
-}
-
 // WrapHelpText wraps help text to fit within maxWidth, splitting on bullet separators.
 // If maxWidth is 0 or negative, returns the original text.
 func WrapHelpText(text string, maxWidth int) string {

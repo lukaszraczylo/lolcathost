@@ -295,11 +295,6 @@ func (l *ListView) ViewFiltered(searchTerm string) string {
 	return sb.String()
 }
 
-// GroupCount returns the number of groups.
-func (l *ListView) GroupCount() int {
-	return len(l.groupOrder)
-}
-
 // GetGroups returns all group names.
 func (l *ListView) GetGroups() []string {
 	return l.groupOrder
