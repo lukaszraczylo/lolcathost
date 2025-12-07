@@ -10,11 +10,15 @@ permissions:
   actions: write
 
 jobs:
-  prepare:
+  autoupdate:
+    name: Update dependencies and test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -22,30 +26,13 @@ jobs:
           go-version: "1.24"
           cache: true
 
-      - name: Install dependencies
-        run: go get ./...
-
-  test:
-    needs: prepare
-    runs-on: ubuntu-latest
-    container: golang:1
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: apt-get update && apt-get install -y ca-certificates make
-
-      - name: Tidy and update modules
+      - name: Update dependencies
         run: |
+          go get -u ./...
           go mod tidy
-          go get -u -v ./...
 
       - name: Run tests
-        run: CI_RUN=${CI} go test -v ./...
-
-      - name: Configure git safe directory
-        run: git config --global --add safe.directory /__w/lolcathost/lolcathost
+        run: go test -race -cover ./...
 
       - name: Commit changes
         id: auto-commit
