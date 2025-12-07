@@ -1,9 +1,9 @@
-name: AutoUpdate
+name: Autoupdate go.mod and go.sum
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "0 3 * * *"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,45 +11,7 @@ permissions:
 
 jobs:
   autoupdate:
-    name: Update dependencies and test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache: true
-
-      - name: Update dependencies
-        run: |
-          go get -u ./...
-          go mod tidy
-
-      - name: Run tests
-        run: go test -race -cover ./...
-
-      - name: Commit changes
-        id: auto-commit
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update go.mod and go.sum"
-          file_pattern: "go.mod go.sum"
-
-      - name: Trigger release workflow
-        if: steps.auto-commit.outputs.changes_detected == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: 'lukaszraczylo',
-              repo: 'lolcathost',
-              workflow_id: 'release.yml',
-              ref: 'main'
-            })
+    uses: lukaszraczylo/shared-actions/.github/workflows/go-autoupdate.yaml@main
+    with:
+      go-version: "1.24"
+      release-workflow: "release.yml"
