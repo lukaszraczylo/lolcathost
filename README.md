@@ -50,11 +50,16 @@ lolcathost manages your `/etc/hosts` file with an interactive terminal interface
 
 ## Installation
 
-### Homebrew (macOS/Linux)
+### Homebrew (macOS)
 
 ```bash
-brew install lukaszraczylo/taps/lolcathost
+brew install --cask lukaszraczylo/taps/lolcathost
 ```
+
+> **Note**: If you previously installed via `brew install lukaszraczylo/taps/lolcathost` (formula), uninstall first:
+> ```bash
+> brew uninstall lolcathost
+> ```
 
 After Homebrew installation, run:
 

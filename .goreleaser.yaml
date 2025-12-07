@@ -22,7 +22,7 @@ builds:
 
 archives:
   - id: lolcathost
-    format: tar.gz
+    formats: [tar.gz]
     name_template: "lolcathost-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - LICENSE
@@ -49,14 +49,21 @@ release:
   draft: false
   prerelease: auto
 
-brews:
+homebrew_casks:
   - repository:
       owner: lukaszraczylo
       name: homebrew-taps
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/lukaszraczylo/lolcathost
     description: "Dynamic host management tool for macOS and Linux with TUI"
     license: MIT
-    test: |
-      system "#{bin}/lolcathost", "--version"
+    url:
+      verified: github.com/lukaszraczylo/lolcathost
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+                           args: ["-dr", "com.apple.quarantine", "#{staged_path}/lolcathost"]
+          end
