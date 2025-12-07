@@ -56,7 +56,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
     homepage: https://github.com/lukaszraczylo/lolcathost
-    description: "Dynamic host management tool for macOS and Linux with TUI"
+    description: "Dynamic host management tool with TUI"
     license: MIT
     url:
       verified: github.com/lukaszraczylo/lolcathost
