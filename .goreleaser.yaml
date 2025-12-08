@@ -58,8 +58,6 @@ homebrew_casks:
     homepage: https://github.com/lukaszraczylo/lolcathost
     description: "Dynamic host management tool with TUI"
     license: MIT
-    url:
-      verified: github.com/lukaszraczylo/lolcathost
     hooks:
       post:
         install: |
