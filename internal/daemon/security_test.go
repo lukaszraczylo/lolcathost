@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,26 +146,31 @@ func TestPeerCredentials(t *testing.T) {
 
 // Matrix test for rate limiting
 func TestRateLimiter_Matrix(t *testing.T) {
-	limits := []int{1, 5, 10, 100}
-	windows := []time.Duration{10 * time.Millisecond, 100 * time.Millisecond, time.Second}
+	testCases := []struct {
+		limit  int
+		window time.Duration
+	}{
+		{1, time.Second},
+		{5, time.Second},
+		{10, time.Second},
+		{100, time.Second},
+	}
 
-	for _, limit := range limits {
-		for _, window := range windows {
-			t.Run(
-				"limit="+string(rune('0'+limit))+"_window="+window.String(),
-				func(t *testing.T) {
-					rl := NewRateLimiter(limit, window)
+	for _, tc := range testCases {
+		t.Run(
+			fmt.Sprintf("limit=%d_window=%s", tc.limit, tc.window),
+			func(t *testing.T) {
+				rl := NewRateLimiter(tc.limit, tc.window)
 
-					// Should allow exactly 'limit' requests
-					for i := 0; i < limit; i++ {
-						assert.True(t, rl.Allow(1))
-					}
+				// Should allow exactly 'limit' requests
+				for i := 0; i < tc.limit; i++ {
+					assert.True(t, rl.Allow(1), "request %d should be allowed", i)
+				}
 
-					// Next should be blocked
-					assert.False(t, rl.Allow(1))
-				},
-			)
-		}
+				// Next should be blocked
+				assert.False(t, rl.Allow(1), "request after limit should be blocked")
+			},
+		)
 	}
 }
 

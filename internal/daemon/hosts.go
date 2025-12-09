@@ -178,13 +178,14 @@ func (m *HostsManager) buildManagedSection(entries []HostEntry) string {
 func (m *HostsManager) writeAtomic(content string) error {
 	// Write to temp file first
 	tmpFile := m.hostsPath + ".tmp"
+	// #nosec G306 -- hosts file must be world-readable
 	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
 		return err
 	}
 
 	// Rename atomically
 	if err := os.Rename(tmpFile, m.hostsPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return err
 	}
 
@@ -193,6 +194,7 @@ func (m *HostsManager) writeAtomic(content string) error {
 
 // CreateBackup creates a backup of the current hosts file.
 func (m *HostsManager) CreateBackup() error {
+	// #nosec G301 -- backup directory should be world-readable for recovery
 	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
@@ -205,6 +207,7 @@ func (m *HostsManager) CreateBackup() error {
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(m.backupDir, fmt.Sprintf("hosts.%s.bak", timestamp))
 
+	// #nosec G306 -- backup files should be world-readable for recovery
 	if err := os.WriteFile(backupPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write backup: %w", err)
 	}
@@ -243,7 +246,7 @@ func (m *HostsManager) cleanupBackups() error {
 	// Remove oldest backups
 	for i := MaxBackups; i < len(backups); i++ {
 		path := filepath.Join(m.backupDir, backups[i].Name())
-		os.Remove(path)
+		_ = os.Remove(path)
 	}
 
 	return nil
@@ -301,6 +304,7 @@ func (m *HostsManager) GetBackupContent(name string) (string, error) {
 		return "", fmt.Errorf("invalid backup name")
 	}
 
+	// #nosec G304 -- backupPath is validated above: filepath.Base(name) == name and prefix/suffix checks
 	content, err := os.ReadFile(backupPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read backup: %w", err)
@@ -318,6 +322,7 @@ func (m *HostsManager) RestoreBackup(name string) error {
 		return fmt.Errorf("invalid backup name")
 	}
 
+	// #nosec G304 -- backupPath is validated above: filepath.Base(name) == name and prefix/suffix checks
 	content, err := os.ReadFile(backupPath)
 	if err != nil {
 		return fmt.Errorf("failed to read backup: %w", err)

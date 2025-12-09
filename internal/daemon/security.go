@@ -114,10 +114,12 @@ type AuditEntry struct {
 func NewAuditLogger(path string) (*AuditLogger, error) {
 	// Ensure directory exists
 	dir := path[:len(path)-len("/audit.log")]
+	// #nosec G301 -- log directory should be world-readable
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
+	// #nosec G304,G302 -- path is from constant AuditLogPath; audit log should be world-readable
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open audit log: %w", err)

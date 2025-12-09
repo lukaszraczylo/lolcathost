@@ -204,7 +204,7 @@ func runList() {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", status, e.Domain, e.IP, e.Alias, e.Group)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 }
 
 func runOn(alias string) {

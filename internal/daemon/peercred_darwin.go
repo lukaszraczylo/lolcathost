@@ -24,7 +24,7 @@ func (s *Server) getPeerCredentials(conn net.Conn) *PeerCredentials {
 	}
 
 	var creds *PeerCredentials
-	rawConn.Control(func(fd uintptr) {
+	_ = rawConn.Control(func(fd uintptr) {
 		xucred, err := unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
 		if err != nil {
 			return
@@ -33,6 +33,7 @@ func (s *Server) getPeerCredentials(conn net.Conn) *PeerCredentials {
 		// Get PID separately using LOCAL_PEERPID
 		var pid int32
 		pidLen := uint32(unsafe.Sizeof(pid))
+		// #nosec G103 -- unsafe required for low-level syscall to get peer PID
 		_, _, errno := syscall.Syscall6(
 			syscall.SYS_GETSOCKOPT,
 			fd,

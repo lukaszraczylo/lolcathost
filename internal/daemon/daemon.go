@@ -44,7 +44,7 @@ func New(configPath string) (*Daemon, error) {
 		cfg.EnsureDefaultGroup()
 		// Save if we added a default group
 		if len(cfg.Groups) == 1 && cfg.Groups[0].Name == "default" && len(cfg.Groups[0].Hosts) == 0 {
-			cfgManager.Save()
+			_ = cfgManager.Save()
 		}
 	}
 
