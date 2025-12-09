@@ -76,19 +76,6 @@ func TestIsNewerVersion(t *testing.T) {
 	}
 }
 
-func TestUpdateInfo_FormatUpdateMessage(t *testing.T) {
-	info := &UpdateInfo{
-		CurrentVersion: "1.0.0",
-		LatestVersion:  "1.1.0",
-		ReleaseURL:     "https://github.com/lukaszraczylo/lolcathost/releases/tag/v1.1.0",
-	}
-
-	msg := info.FormatUpdateMessage()
-	assert.Contains(t, msg, "1.0.0")
-	assert.Contains(t, msg, "1.1.0")
-	assert.Contains(t, msg, "https://github.com")
-}
-
 func TestNewChecker(t *testing.T) {
 	checker := NewChecker("lukaszraczylo", "lolcathost", "v1.0.0")
 

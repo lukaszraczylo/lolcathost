@@ -354,7 +354,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setError(fmt.Sprintf("Refresh failed: %v", msg.err))
 			// Mark as disconnected to trigger reconnect
 			m.connected = false
-			m.client.Close()
+			_ = m.client.Close()
 		} else {
 			// Always update the list, even if entries is nil/empty
 			m.list.SetItems(msg.entries)
@@ -603,7 +603,7 @@ func (m *Model) handleFormKey(msg tea.KeyMsg) tea.Cmd {
 			oldAlias := m.form.EditAlias()
 			return tea.Sequence(
 				func() tea.Msg {
-					m.client.Delete(oldAlias)
+					_ = m.client.Delete(oldAlias)
 					return nil
 				},
 				m.addHost(domain, ip, "", group), // Empty alias = auto-generate
@@ -678,7 +678,7 @@ func (m *Model) handlePresetFormKey(msg tea.KeyMsg) tea.Cmd {
 				oldName := m.presetPicker.EditName()
 				return tea.Sequence(
 					func() tea.Msg {
-						m.client.DeletePreset(oldName)
+						_ = m.client.DeletePreset(oldName)
 						return nil
 					},
 					m.addPreset(name, enable, disable),
@@ -1134,11 +1134,6 @@ func (m *Model) confirmDeleteView() string {
 	sb.WriteString(helpDescStyle.Render("y confirm • n/Esc cancel"))
 
 	return dialogStyle.Render(sb.String())
-}
-
-// Run starts the TUI application.
-func Run(socketPath string) error {
-	return RunWithVersion(socketPath, "dev", "", "")
 }
 
 // RunWithVersion starts the TUI application with version info for update checking.

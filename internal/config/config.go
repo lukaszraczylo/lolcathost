@@ -167,7 +167,7 @@ func (m *Manager) watchLoop() {
 func (m *Manager) Stop() {
 	close(m.stopCh)
 	if m.watcher != nil {
-		m.watcher.Close()
+		_ = m.watcher.Close()
 	}
 }
 
@@ -338,76 +338,6 @@ func (c *Config) DeleteHost(alias string) bool {
 	return false
 }
 
-// UpdateHost updates an existing host by alias.
-func (c *Config) UpdateHost(oldAlias, domain, ip, newAlias, groupName string) error {
-	// Find the host
-	var foundGroup int = -1
-	var foundHost int = -1
-	for i := range c.Groups {
-		for j := range c.Groups[i].Hosts {
-			if c.Groups[i].Hosts[j].Alias == oldAlias {
-				foundGroup = i
-				foundHost = j
-				break
-			}
-		}
-		if foundHost >= 0 {
-			break
-		}
-	}
-
-	if foundHost < 0 {
-		return fmt.Errorf("alias not found: %s", oldAlias)
-	}
-
-	// Check for duplicate alias if alias is changing
-	if oldAlias != newAlias {
-		if existing, _ := c.FindHostByAlias(newAlias); existing != nil {
-			return fmt.Errorf("alias already exists: %s", newAlias)
-		}
-	}
-
-	// Get current enabled state
-	enabled := c.Groups[foundGroup].Hosts[foundHost].Enabled
-
-	// If group is changing, move to new group
-	if c.Groups[foundGroup].Name != groupName {
-		// Remove from old group
-		c.Groups[foundGroup].Hosts = append(c.Groups[foundGroup].Hosts[:foundHost], c.Groups[foundGroup].Hosts[foundHost+1:]...)
-
-		// Add to new group
-		host := Host{
-			Domain:  domain,
-			IP:      ip,
-			Alias:   newAlias,
-			Enabled: enabled,
-		}
-
-		// Find or create target group
-		found := false
-		for i := range c.Groups {
-			if c.Groups[i].Name == groupName {
-				c.Groups[i].Hosts = append(c.Groups[i].Hosts, host)
-				found = true
-				break
-			}
-		}
-		if !found {
-			c.Groups = append(c.Groups, Group{
-				Name:  groupName,
-				Hosts: []Host{host},
-			})
-		}
-	} else {
-		// Update in place
-		c.Groups[foundGroup].Hosts[foundHost].Domain = domain
-		c.Groups[foundGroup].Hosts[foundHost].IP = ip
-		c.Groups[foundGroup].Hosts[foundHost].Alias = newAlias
-	}
-
-	return nil
-}
-
 // ApplyPreset applies a preset to the configuration.
 func (c *Config) ApplyPreset(name string) error {
 	preset := c.FindPreset(name)
@@ -482,6 +412,7 @@ func (m *Manager) Save() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	// #nosec G306 -- config file should be world-readable
 	if err := os.WriteFile(m.path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
@@ -492,6 +423,7 @@ func (m *Manager) Save() error {
 // CreateDefault creates a default configuration file.
 func CreateDefault(path string) error {
 	dir := filepath.Dir(path)
+	// #nosec G301 -- config directory should be world-readable
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -533,6 +465,7 @@ func CreateDefault(path string) error {
 		return fmt.Errorf("failed to marshal default config: %w", err)
 	}
 
+	// #nosec G306 -- config file should be world-readable
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write default config: %w", err)
 	}

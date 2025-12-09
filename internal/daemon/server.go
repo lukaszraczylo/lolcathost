@@ -48,7 +48,7 @@ func NewServer(socketPath string, cfgManager *config.Manager) *Server {
 // Start starts the server.
 func (s *Server) Start() error {
 	// Remove existing socket
-	os.Remove(s.socketPath)
+	_ = os.Remove(s.socketPath)
 
 	listener, err := net.Listen("unix", s.socketPath)
 	if err != nil {
@@ -56,14 +56,15 @@ func (s *Server) Start() error {
 	}
 
 	// Set socket permissions: 0660 root:lolcathost
+	// #nosec G302 -- socket must be group-accessible for lolcathost group members
 	if err := os.Chmod(s.socketPath, 0660); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
 	// Set socket group to lolcathost (GID 850)
 	if err := os.Chown(s.socketPath, 0, 850); err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("failed to set socket ownership: %w", err)
 	}
 
@@ -94,13 +95,13 @@ func (s *Server) Stop() error {
 	close(s.stopCh)
 
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
 	}
 
-	os.Remove(s.socketPath)
+	_ = os.Remove(s.socketPath)
 
 	if s.auditLogger != nil {
-		s.auditLogger.Close()
+		_ = s.auditLogger.Close()
 	}
 
 	return nil
@@ -200,7 +201,7 @@ func (s *Server) isAuthorized(creds *PeerCredentials) bool {
 func (s *Server) writeResponse(conn net.Conn, resp *protocol.Response) {
 	data, _ := json.Marshal(resp)
 	data = append(data, '\n')
-	conn.Write(data)
+	_, _ = conn.Write(data)
 }
 
 func (s *Server) handleRequest(req *protocol.Request, creds *PeerCredentials) *protocol.Response {
@@ -492,7 +493,7 @@ func (s *Server) handleRollback(req *protocol.Request) *protocol.Response {
 	}
 
 	// Flush DNS after restore
-	s.flusher.Flush()
+	_ = s.flusher.Flush()
 
 	resp, _ := protocol.NewOKResponse(map[string]string{"restored": payload.BackupName})
 	return resp

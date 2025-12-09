@@ -44,7 +44,7 @@ func (c *Client) Connect() error {
 
 	// Close existing connection if any
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.conn = nil
 		c.reader = nil
 	}
@@ -83,7 +83,7 @@ func (c *Client) send(req *protocol.Request) (*protocol.Response, error) {
 	}
 
 	// Set deadline
-	c.conn.SetDeadline(time.Now().Add(c.timeout))
+	_ = c.conn.SetDeadline(time.Now().Add(c.timeout))
 
 	// Send request
 	data, err := json.Marshal(req)

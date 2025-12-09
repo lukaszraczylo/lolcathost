@@ -168,7 +168,7 @@ func (i *Installer) Uninstall() error {
 	}
 
 	// Remove socket
-	os.Remove(SocketPath)
+	_ = os.Remove(SocketPath)
 
 	// Note: We don't remove the group, logs, or backups
 	// The user may want to keep these
@@ -225,6 +225,7 @@ func (i *Installer) createGroupDarwin() error {
 	}
 
 	for _, args := range cmds {
+		// #nosec G204 -- args are hardcoded dscl commands with the constant GroupName
 		if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
 			return fmt.Errorf("command %v failed: %w", args, err)
 		}
@@ -315,6 +316,7 @@ func (i *Installer) createDirectories() error {
 
 	for _, dir := range dirs {
 		i.log("  Creating directory '%s'...", dir)
+		// #nosec G301 -- system directories should be world-readable
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
 		}
@@ -340,21 +342,23 @@ func (i *Installer) installLaunchDaemon() error {
 
 	// Unload if already loaded (do this before writing plist)
 	i.log("  Stopping existing daemon if running...")
-	exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
+	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
 
 	// Give launchd time to fully unload the service
 	time.Sleep(500 * time.Millisecond)
 
 	// Remove old plist to ensure clean state
-	os.Remove(plistPath)
+	_ = os.Remove(plistPath)
 
 	i.log("  Writing LaunchDaemon plist...")
+	// #nosec G306 -- plist files are world-readable by convention
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to write plist: %w", err)
 	}
 
 	// Bootstrap the daemon
 	i.log("  Starting daemon...")
+	// #nosec G204 -- plistPath is constructed from constant LaunchDaemonDir
 	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -376,10 +380,10 @@ func (i *Installer) uninstallLaunchDaemon() {
 	plistPath := filepath.Join(LaunchDaemonDir, "com.lolcathost.daemon.plist")
 
 	i.log("  Stopping daemon...")
-	exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
+	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
 
 	i.log("  Removing LaunchDaemon plist...")
-	os.Remove(plistPath)
+	_ = os.Remove(plistPath)
 }
 
 func (i *Installer) installSystemdService() error {
@@ -387,6 +391,7 @@ func (i *Installer) installSystemdService() error {
 	unitContent := fmt.Sprintf(SystemdUnit, i.binaryPath)
 
 	i.log("  Writing systemd unit...")
+	// #nosec G306 -- systemd unit files are world-readable by convention
 	if err := os.WriteFile(unitPath, []byte(unitContent), 0644); err != nil {
 		return fmt.Errorf("failed to write unit file: %w", err)
 	}
@@ -408,12 +413,12 @@ func (i *Installer) installSystemdService() error {
 
 func (i *Installer) uninstallSystemdService() {
 	i.log("  Stopping and disabling service...")
-	exec.Command("systemctl", "disable", "--now", "lolcathost.service").Run()
+	_ = exec.Command("systemctl", "disable", "--now", "lolcathost.service").Run()
 
 	i.log("  Removing systemd unit...")
-	os.Remove(filepath.Join(SystemdDir, "lolcathost.service"))
+	_ = os.Remove(filepath.Join(SystemdDir, "lolcathost.service"))
 
-	exec.Command("systemctl", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run()
 }
 
 func (i *Installer) createDefaultConfig() error {
@@ -430,6 +435,7 @@ func (i *Installer) createDefaultConfig() error {
 
 	// Create config directory
 	configDir := filepath.Dir(configPath)
+	// #nosec G301 -- config directory should be world-readable
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}

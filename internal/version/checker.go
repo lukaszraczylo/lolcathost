@@ -76,6 +76,7 @@ func (c *Checker) CheckForUpdate(ctx context.Context) *UpdateInfo {
 
 // fetchLatestRelease fetches the latest release info from GitHub API
 func (c *Checker) fetchLatestRelease(ctx context.Context) (*ReleaseInfo, error) {
+	// #nosec G107 -- URL is constructed from hardcoded constant and validated owner/repo
 	url := fmt.Sprintf(githubReleasesURL, c.owner, c.repo)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -145,15 +146,9 @@ func parseVersion(v string) []int {
 
 	for _, p := range parts {
 		var num int
-		fmt.Sscanf(p, "%d", &num)
+		_, _ = fmt.Sscanf(p, "%d", &num)
 		result = append(result, num)
 	}
 
 	return result
-}
-
-// FormatUpdateMessage formats a user-friendly update notification
-func (u *UpdateInfo) FormatUpdateMessage() string {
-	return fmt.Sprintf("New version available: %s (current: %s) - %s",
-		u.LatestVersion, u.CurrentVersion, u.ReleaseURL)
 }
