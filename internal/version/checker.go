@@ -146,7 +146,7 @@ func parseVersion(v string) []int {
 
 	for _, p := range parts {
 		var num int
-		_, _ = fmt.Sscanf(p, "%d", &num)
+		_, _ = fmt.Sscanf(p, "%d", &num) // Error intentionally ignored - non-numeric parts become 0
 		result = append(result, num)
 	}
 

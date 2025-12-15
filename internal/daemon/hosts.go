@@ -2,7 +2,6 @@
 package daemon
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +24,10 @@ const (
 	markerEnd   = "# ========== END LOLCATHOST =========="
 )
 
+// entryRegex matches host entries in the managed section.
+// Compiled once at package init for efficiency.
+var entryRegex = regexp.MustCompile(`^(\S+)\s+(\S+)\s+#\s*lolcathost:(\S+)$`)
+
 // HostEntry represents a single entry in the hosts file.
 type HostEntry struct {
 	IP      string
@@ -45,59 +48,6 @@ func NewHostsManager() *HostsManager {
 		hostsPath: HostsPath,
 		backupDir: BackupDir,
 	}
-}
-
-// NewHostsManagerWithPaths creates a hosts manager with custom paths (for testing).
-func NewHostsManagerWithPaths(hostsPath, backupDir string) *HostsManager {
-	return &HostsManager{
-		hostsPath: hostsPath,
-		backupDir: backupDir,
-	}
-}
-
-// ReadManagedEntries reads the lolcathost-managed entries from the hosts file.
-func (m *HostsManager) ReadManagedEntries() ([]HostEntry, error) {
-	file, err := os.Open(m.hostsPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open hosts file: %w", err)
-	}
-	defer file.Close()
-
-	var entries []HostEntry
-	inManagedSection := false
-	scanner := bufio.NewScanner(file)
-	entryRegex := regexp.MustCompile(`^(\S+)\s+(\S+)\s+#\s*lolcathost:(\S+)$`)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		if line == markerStart {
-			inManagedSection = true
-			continue
-		}
-		if line == markerEnd {
-			inManagedSection = false
-			continue
-		}
-
-		if inManagedSection && !strings.HasPrefix(line, "#") && line != "" {
-			matches := entryRegex.FindStringSubmatch(line)
-			if len(matches) == 4 {
-				entries = append(entries, HostEntry{
-					IP:      matches[1],
-					Domain:  matches[2],
-					Alias:   matches[3],
-					Enabled: true,
-				})
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read hosts file: %w", err)
-	}
-
-	return entries, nil
 }
 
 // WriteManagedEntries writes the managed entries to the hosts file.
@@ -178,7 +128,7 @@ func (m *HostsManager) buildManagedSection(entries []HostEntry) string {
 func (m *HostsManager) writeAtomic(content string) error {
 	// Write to temp file first
 	tmpFile := m.hostsPath + ".tmp"
-	// #nosec G306 -- hosts file must be world-readable
+	// #nosec G306 - Hosts file permissions are intentionally 0644
 	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
 		return err
 	}
@@ -194,12 +144,12 @@ func (m *HostsManager) writeAtomic(content string) error {
 
 // CreateBackup creates a backup of the current hosts file.
 func (m *HostsManager) CreateBackup() error {
-	// #nosec G301 -- backup directory should be world-readable for recovery
+	// #nosec G301 - Backup directory permissions are intentionally 0755
 	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	content, err := os.ReadFile(m.hostsPath)
+	content, err := os.ReadFile(m.hostsPath) // #nosec G304 - Path is controlled by daemon, not user input
 	if err != nil {
 		return fmt.Errorf("failed to read hosts file: %w", err)
 	}
@@ -207,7 +157,7 @@ func (m *HostsManager) CreateBackup() error {
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(m.backupDir, fmt.Sprintf("hosts.%s.bak", timestamp))
 
-	// #nosec G306 -- backup files should be world-readable for recovery
+	// #nosec G306 - Backup file permissions are intentionally 0644
 	if err := os.WriteFile(backupPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write backup: %w", err)
 	}
@@ -297,15 +247,14 @@ type BackupInfo struct {
 
 // GetBackupContent returns the content of a backup file.
 func (m *HostsManager) GetBackupContent(name string) (string, error) {
-	backupPath := filepath.Join(m.backupDir, name)
-
 	// Validate backup name to prevent path traversal
 	if filepath.Base(name) != name || !strings.HasPrefix(name, "hosts.") || !strings.HasSuffix(name, ".bak") {
 		return "", fmt.Errorf("invalid backup name")
 	}
 
-	// #nosec G304 -- backupPath is validated above: filepath.Base(name) == name and prefix/suffix checks
-	content, err := os.ReadFile(backupPath)
+	backupPath := filepath.Join(m.backupDir, name)
+
+	content, err := os.ReadFile(backupPath) // #nosec G304 - Path is validated above to prevent traversal
 	if err != nil {
 		return "", fmt.Errorf("failed to read backup: %w", err)
 	}
@@ -315,15 +264,14 @@ func (m *HostsManager) GetBackupContent(name string) (string, error) {
 
 // RestoreBackup restores a backup by name.
 func (m *HostsManager) RestoreBackup(name string) error {
-	backupPath := filepath.Join(m.backupDir, name)
-
 	// Validate backup name to prevent path traversal
 	if filepath.Base(name) != name || !strings.HasPrefix(name, "hosts.") || !strings.HasSuffix(name, ".bak") {
 		return fmt.Errorf("invalid backup name")
 	}
 
-	// #nosec G304 -- backupPath is validated above: filepath.Base(name) == name and prefix/suffix checks
-	content, err := os.ReadFile(backupPath)
+	backupPath := filepath.Join(m.backupDir, name)
+
+	content, err := os.ReadFile(backupPath) // #nosec G304 - Path is validated above to prevent traversal
 	if err != nil {
 		return fmt.Errorf("failed to read backup: %w", err)
 	}

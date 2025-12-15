@@ -30,10 +30,15 @@ func (s *Server) getPeerCredentials(conn net.Conn) *PeerCredentials {
 			return
 		}
 
+		// Validate Groups array is not empty before accessing
+		if xucred.Ngroups == 0 {
+			return
+		}
+
 		// Get PID separately using LOCAL_PEERPID
 		var pid int32
 		pidLen := uint32(unsafe.Sizeof(pid))
-		// #nosec G103 -- unsafe required for low-level syscall to get peer PID
+		// #nosec G103 - unsafe.Pointer required for syscall to get peer PID
 		_, _, errno := syscall.Syscall6(
 			syscall.SYS_GETSOCKOPT,
 			fd,

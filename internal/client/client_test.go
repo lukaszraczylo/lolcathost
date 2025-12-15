@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -396,31 +395,6 @@ func TestClient_NotConnected(t *testing.T) {
 	_, err := client.Status()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not connected")
-}
-
-func TestClient_Timeout(t *testing.T) {
-	client := NewWithTimeout("/nonexistent.sock", 100*time.Millisecond)
-	assert.Equal(t, 100*time.Millisecond, client.timeout)
-}
-
-func TestIsConnected(t *testing.T) {
-	t.Run("connected", func(t *testing.T) {
-		server := newMockServer(t)
-		defer server.close()
-
-		server.handler = func(req *protocol.Request) *protocol.Response {
-			resp, _ := protocol.NewOKResponse(nil)
-			return resp
-		}
-
-		connected := IsConnected(server.path)
-		assert.True(t, connected)
-	})
-
-	t.Run("not connected", func(t *testing.T) {
-		connected := IsConnected("/nonexistent/socket.sock")
-		assert.False(t, connected)
-	})
 }
 
 // Matrix test for request types

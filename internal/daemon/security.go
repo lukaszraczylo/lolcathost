@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -19,20 +20,27 @@ const (
 	RateLimitWindow = time.Minute
 )
 
-// RateLimiter implements per-PID rate limiting.
+// pidRateBucket holds rate limiting data for a single PID using a ring buffer.
+type pidRateBucket struct {
+	timestamps []time.Time // Ring buffer of request timestamps
+	head       int         // Next write position
+	count      int         // Number of valid entries
+}
+
+// RateLimiter implements per-PID rate limiting with efficient memory usage.
 type RateLimiter struct {
-	mu       sync.Mutex
-	requests map[int32][]time.Time
-	limit    int
-	window   time.Duration
+	mu      sync.Mutex
+	buckets map[int32]*pidRateBucket
+	limit   int
+	window  time.Duration
 }
 
 // NewRateLimiter creates a new rate limiter.
 func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		requests: make(map[int32][]time.Time),
-		limit:    limit,
-		window:   window,
+		buckets: make(map[int32]*pidRateBucket),
+		limit:   limit,
+		window:  window,
 	}
 }
 
@@ -44,31 +52,42 @@ func (r *RateLimiter) Allow(pid int32) bool {
 	now := time.Now()
 	cutoff := now.Add(-r.window)
 
-	// Get existing requests for this PID
-	reqs := r.requests[pid]
+	bucket, exists := r.buckets[pid]
+	if !exists {
+		// Create new bucket with fixed capacity
+		bucket = &pidRateBucket{
+			timestamps: make([]time.Time, r.limit),
+			head:       0,
+			count:      0,
+		}
+		r.buckets[pid] = bucket
+	}
 
-	// Filter out old requests
-	var validReqs []time.Time
-	for _, t := range reqs {
-		if t.After(cutoff) {
-			validReqs = append(validReqs, t)
+	// Count valid (non-expired) requests in the ring buffer
+	validCount := 0
+	for i := 0; i < bucket.count; i++ {
+		idx := (bucket.head - bucket.count + i + r.limit) % r.limit
+		if bucket.timestamps[idx].After(cutoff) {
+			validCount++
 		}
 	}
 
 	// Check if under limit
-	if len(validReqs) >= r.limit {
-		r.requests[pid] = validReqs
+	if validCount >= r.limit {
 		return false
 	}
 
-	// Add new request
-	validReqs = append(validReqs, now)
-	r.requests[pid] = validReqs
+	// Add new request to ring buffer (overwrites oldest if full)
+	bucket.timestamps[bucket.head] = now
+	bucket.head = (bucket.head + 1) % r.limit
+	if bucket.count < r.limit {
+		bucket.count++
+	}
 
 	return true
 }
 
-// Cleanup removes old entries from the rate limiter.
+// Cleanup removes stale PID entries from the rate limiter.
 func (r *RateLimiter) Cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -76,17 +95,18 @@ func (r *RateLimiter) Cleanup() {
 	now := time.Now()
 	cutoff := now.Add(-r.window)
 
-	for pid, reqs := range r.requests {
-		var validReqs []time.Time
-		for _, t := range reqs {
-			if t.After(cutoff) {
-				validReqs = append(validReqs, t)
+	for pid, bucket := range r.buckets {
+		// Check if all timestamps are expired
+		hasValid := false
+		for i := 0; i < bucket.count; i++ {
+			idx := (bucket.head - bucket.count + i + r.limit) % r.limit
+			if bucket.timestamps[idx].After(cutoff) {
+				hasValid = true
+				break
 			}
 		}
-		if len(validReqs) == 0 {
-			delete(r.requests, pid)
-		} else {
-			r.requests[pid] = validReqs
+		if !hasValid {
+			delete(r.buckets, pid)
 		}
 	}
 }
@@ -114,12 +134,12 @@ type AuditEntry struct {
 func NewAuditLogger(path string) (*AuditLogger, error) {
 	// Ensure directory exists
 	dir := path[:len(path)-len("/audit.log")]
-	// #nosec G301 -- log directory should be world-readable
+	// #nosec G301 - Log directory permissions are intentionally 0755
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
-	// #nosec G304,G302 -- path is from constant AuditLogPath; audit log should be world-readable
+	// #nosec G302,G304,G306 - Path is constant, permissions are intentional for audit log
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
@@ -187,12 +207,28 @@ func isUserInGroup(uid uint32, targetGID uint32) bool {
 	}
 
 	// Check if target GID is in the list
-	targetGIDStr := fmt.Sprintf("%d", targetGID)
-	for _, gid := range groupIDs {
-		if gid == targetGIDStr {
+	for _, gidStr := range groupIDs {
+		gid, err := strconv.ParseUint(gidStr, 10, 32)
+		if err != nil {
+			continue
+		}
+		if uint32(gid) == targetGID {
 			return true
 		}
 	}
 
 	return false
+}
+
+// lookupGroupGID looks up a group by name and returns its GID.
+func lookupGroupGID(name string) (int, error) {
+	group, err := user.LookupGroup(name)
+	if err != nil {
+		return 0, fmt.Errorf("group not found: %s", name)
+	}
+	gid, err := strconv.Atoi(group.Gid)
+	if err != nil {
+		return 0, fmt.Errorf("invalid GID for group %s: %s", name, group.Gid)
+	}
+	return gid, nil
 }

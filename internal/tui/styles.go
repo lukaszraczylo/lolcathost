@@ -37,12 +37,6 @@ var (
 
 	disabledStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
-
-	pendingStyle = lipgloss.NewStyle().
-			Foreground(colorWarning)
-
-	errorIndicatorStyle = lipgloss.NewStyle().
-				Foreground(colorError)
 )
 
 // Status bar and help
@@ -117,34 +111,6 @@ var (
 				Foreground(colorSelectedFg).
 				Padding(0, 1)
 )
-
-// Indicator returns the appropriate status indicator string.
-func Indicator(enabled bool, pending bool, hasError bool) string {
-	if hasError {
-		return errorIndicatorStyle.Render("✗")
-	}
-	if pending {
-		return pendingStyle.Render("◐")
-	}
-	if enabled {
-		return enabledStyle.Render("●")
-	}
-	return disabledStyle.Render("○")
-}
-
-// StatusText returns the status text with appropriate styling
-func StatusText(enabled bool, pending bool, hasError bool) string {
-	if hasError {
-		return errorIndicatorStyle.Render("✗ Error")
-	}
-	if pending {
-		return pendingStyle.Render("◐ Pending")
-	}
-	if enabled {
-		return enabledStyle.Render("● Active")
-	}
-	return disabledStyle.Render("○ Disabled")
-}
 
 // WrapHelpText wraps help text to fit within maxWidth, splitting on bullet separators.
 // If maxWidth is 0 or negative, returns the original text.

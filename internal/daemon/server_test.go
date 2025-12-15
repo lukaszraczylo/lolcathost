@@ -36,7 +36,7 @@ func setupTestServer(t *testing.T) (*Server, string, func()) {
 	server := &Server{
 		socketPath:  socketPath,
 		config:      cfgManager,
-		hosts:       NewHostsManagerWithPaths(hostsPath, backupDir),
+		hosts:       newHostsManagerWithPaths(hostsPath, backupDir),
 		flusher:     NewDNSFlusher(FlushMethodAuto),
 		rateLimiter: NewRateLimiter(100, time.Minute),
 		stopCh:      make(chan struct{}),
@@ -754,7 +754,7 @@ func BenchmarkServer_HandleSet(b *testing.B) {
 
 	server := &Server{
 		config:      cfgManager,
-		hosts:       NewHostsManagerWithPaths(hostsPath, backupDir),
+		hosts:       newHostsManagerWithPaths(hostsPath, backupDir),
 		flusher:     NewDNSFlusher(FlushMethodAuto),
 		rateLimiter: NewRateLimiter(100000, time.Minute),
 	}

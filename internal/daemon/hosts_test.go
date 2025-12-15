@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHostsManager_ReadManagedEntries(t *testing.T) {
+// newHostsManagerWithPaths creates a hosts manager with custom paths (for testing).
+func newHostsManagerWithPaths(hostsPath, backupDir string) *HostsManager {
+	return &HostsManager{
+		hostsPath: hostsPath,
+		backupDir: backupDir,
+	}
+}
+
+// readManagedEntries reads the lolcathost-managed entries from the hosts file (for testing).
+func (m *HostsManager) readManagedEntries() ([]HostEntry, error) {
+	content, err := os.ReadFile(m.hostsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read hosts file: %w", err)
+	}
+
+	var entries []HostEntry
+	inManagedSection := false
+
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+
+		if line == markerStart {
+			inManagedSection = true
+			continue
+		}
+		if line == markerEnd {
+			inManagedSection = false
+			continue
+		}
+
+		if inManagedSection && !strings.HasPrefix(line, "#") && line != "" {
+			matches := entryRegex.FindStringSubmatch(line)
+			if len(matches) == 4 {
+				entries = append(entries, HostEntry{
+					IP:      matches[1],
+					Domain:  matches[2],
+					Alias:   matches[3],
+					Enabled: true,
+				})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+func TestHostsManager_readManagedEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 	hostsPath := filepath.Join(tmpDir, "hosts")
 
@@ -26,8 +73,8 @@ func TestHostsManager_ReadManagedEntries(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(hostsContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
-	entries, err := manager.ReadManagedEntries()
+	manager := newHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
+	entries, err := manager.readManagedEntries()
 	require.NoError(t, err)
 
 	assert.Len(t, entries, 2)
@@ -39,7 +86,7 @@ func TestHostsManager_ReadManagedEntries(t *testing.T) {
 	assert.Equal(t, "api-local", entries[1].Alias)
 }
 
-func TestHostsManager_ReadManagedEntries_NoSection(t *testing.T) {
+func TestHostsManager_readManagedEntries_NoSection(t *testing.T) {
 	tmpDir := t.TempDir()
 	hostsPath := filepath.Join(tmpDir, "hosts")
 
@@ -49,8 +96,8 @@ func TestHostsManager_ReadManagedEntries_NoSection(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(hostsContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
-	entries, err := manager.ReadManagedEntries()
+	manager := newHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
+	entries, err := manager.readManagedEntries()
 	require.NoError(t, err)
 
 	assert.Empty(t, entries)
@@ -68,7 +115,7 @@ func TestHostsManager_WriteManagedEntries(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(initialContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	entries := []HostEntry{
 		{IP: "127.0.0.1", Domain: "myapp.com", Alias: "myapp-local", Enabled: true},
@@ -107,7 +154,7 @@ func TestHostsManager_WriteManagedEntries_UpdatesExisting(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(initialContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	entries := []HostEntry{
 		{IP: "127.0.0.1", Domain: "new.com", Alias: "new", Enabled: true},
@@ -134,7 +181,7 @@ func TestHostsManager_CreateBackup(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(hostsContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	err = manager.CreateBackup()
 	require.NoError(t, err)
@@ -175,7 +222,7 @@ func TestHostsManager_ListBackups(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	backups, err := manager.ListBackups()
 	require.NoError(t, err)
@@ -187,7 +234,7 @@ func TestHostsManager_ListBackups_NoBackupDir(t *testing.T) {
 	hostsPath := filepath.Join(tmpDir, "hosts")
 	backupDir := filepath.Join(tmpDir, "nonexistent")
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	backups, err := manager.ListBackups()
 	require.NoError(t, err)
@@ -204,7 +251,7 @@ func TestHostsManager_RestoreBackup(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte(initialContent), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	// Create backup
 	err = manager.CreateBackup()
@@ -231,7 +278,7 @@ func TestHostsManager_RestoreBackup(t *testing.T) {
 
 func TestHostsManager_RestoreBackup_InvalidName(t *testing.T) {
 	tmpDir := t.TempDir()
-	manager := NewHostsManagerWithPaths(
+	manager := newHostsManagerWithPaths(
 		filepath.Join(tmpDir, "hosts"),
 		filepath.Join(tmpDir, "backups"),
 	)
@@ -259,7 +306,7 @@ func TestHostsManager_CleanupBackups(t *testing.T) {
 	err := os.WriteFile(hostsPath, []byte("localhost"), 0644)
 	require.NoError(t, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	// Create more than MaxBackups
 	for i := 0; i < MaxBackups+5; i++ {
@@ -338,7 +385,7 @@ func TestHostsManager_BuildManagedSection(t *testing.T) {
 }
 
 // Matrix tests for hosts file parsing
-func TestHostsManager_ReadManagedEntries_Matrix(t *testing.T) {
+func TestHostsManager_readManagedEntries_Matrix(t *testing.T) {
 	ips := []string{"127.0.0.1", "192.168.1.1", "::1"}
 	domains := []string{"example.com", "sub.example.com", "my-app.test"}
 	aliases := []string{"test", "my-alias", "app-1"}
@@ -357,8 +404,8 @@ func TestHostsManager_ReadManagedEntries_Matrix(t *testing.T) {
 					err := os.WriteFile(hostsPath, []byte(content), 0644)
 					require.NoError(t, err)
 
-					manager := NewHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
-					entries, err := manager.ReadManagedEntries()
+					manager := newHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
+					entries, err := manager.readManagedEntries()
 					require.NoError(t, err)
 					require.Len(t, entries, 1)
 
@@ -371,7 +418,7 @@ func TestHostsManager_ReadManagedEntries_Matrix(t *testing.T) {
 	}
 }
 
-func BenchmarkHostsManager_ReadManagedEntries(b *testing.B) {
+func BenchmarkHostsManager_readManagedEntries(b *testing.B) {
 	tmpDir := b.TempDir()
 	hostsPath := filepath.Join(tmpDir, "hosts")
 
@@ -387,11 +434,11 @@ func BenchmarkHostsManager_ReadManagedEntries(b *testing.B) {
 	err := os.WriteFile(hostsPath, []byte(content.String()), 0644)
 	require.NoError(b, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
+	manager := newHostsManagerWithPaths(hostsPath, filepath.Join(tmpDir, "backups"))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = manager.ReadManagedEntries()
+		_, _ = manager.readManagedEntries()
 	}
 }
 
@@ -403,7 +450,7 @@ func BenchmarkHostsManager_WriteManagedEntries(b *testing.B) {
 	err := os.WriteFile(hostsPath, []byte("127.0.0.1\tlocalhost\n"), 0644)
 	require.NoError(b, err)
 
-	manager := NewHostsManagerWithPaths(hostsPath, backupDir)
+	manager := newHostsManagerWithPaths(hostsPath, backupDir)
 
 	entries := make([]HostEntry, 50)
 	for i := range entries {

@@ -124,6 +124,12 @@ func (m *Manager) Get() *Config {
 	return m.config
 }
 
+// Reload reloads the configuration from disk.
+// This is useful for rolling back after a failed operation.
+func (m *Manager) Reload() error {
+	return m.Load()
+}
+
 // Watch starts watching the config file for changes.
 func (m *Manager) Watch(onChange func(*Config)) error {
 	watcher, err := fsnotify.NewWatcher()
@@ -151,8 +157,15 @@ func (m *Manager) watchLoop() {
 				return
 			}
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-				if err := m.Load(); err == nil && m.onChange != nil {
-					m.onChange(m.Get())
+				// Load and notify under lock to prevent race conditions
+				m.mu.Lock()
+				err := m.loadLocked()
+				cfg := m.config
+				onChange := m.onChange
+				m.mu.Unlock()
+
+				if err == nil && onChange != nil {
+					onChange(cfg)
 				}
 			}
 		case <-m.watcher.Errors:
@@ -161,6 +174,27 @@ func (m *Manager) watchLoop() {
 			return
 		}
 	}
+}
+
+// loadLocked reads and parses the configuration file.
+// Caller must hold m.mu lock.
+func (m *Manager) loadLocked() error {
+	data, err := os.ReadFile(m.path)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	if err := ValidateConfig(&cfg); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	m.config = &cfg
+	return nil
 }
 
 // Stop stops watching the config file.
@@ -180,16 +214,26 @@ func (c *Config) GetAllHosts() []Host {
 	return hosts
 }
 
-// FindHostByAlias finds a host by its alias.
-func (c *Config) FindHostByAlias(alias string) (*Host, *Group) {
+// findHostIndices finds the group and host indices for a given alias.
+// Returns -1, -1 if not found.
+func (c *Config) findHostIndices(alias string) (groupIdx, hostIdx int) {
 	for i := range c.Groups {
 		for j := range c.Groups[i].Hosts {
 			if c.Groups[i].Hosts[j].Alias == alias {
-				return &c.Groups[i].Hosts[j], &c.Groups[i]
+				return i, j
 			}
 		}
 	}
-	return nil, nil
+	return -1, -1
+}
+
+// FindHostByAlias finds a host by its alias.
+func (c *Config) FindHostByAlias(alias string) (*Host, *Group) {
+	groupIdx, hostIdx := c.findHostIndices(alias)
+	if groupIdx < 0 {
+		return nil, nil
+	}
+	return &c.Groups[groupIdx].Hosts[hostIdx], &c.Groups[groupIdx]
 }
 
 // FindPreset finds a preset by name.
@@ -204,15 +248,12 @@ func (c *Config) FindPreset(name string) *Preset {
 
 // SetHostEnabled sets the enabled state of a host by alias.
 func (c *Config) SetHostEnabled(alias string, enabled bool) bool {
-	for i := range c.Groups {
-		for j := range c.Groups[i].Hosts {
-			if c.Groups[i].Hosts[j].Alias == alias {
-				c.Groups[i].Hosts[j].Enabled = enabled
-				return true
-			}
-		}
+	groupIdx, hostIdx := c.findHostIndices(alias)
+	if groupIdx < 0 {
+		return false
 	}
-	return false
+	c.Groups[groupIdx].Hosts[hostIdx].Enabled = enabled
+	return true
 }
 
 // GenerateAlias creates a unique alias from a domain name.
@@ -327,15 +368,68 @@ func (c *Config) GetGroups() []string {
 
 // DeleteHost removes a host by alias.
 func (c *Config) DeleteHost(alias string) bool {
-	for i := range c.Groups {
-		for j := range c.Groups[i].Hosts {
-			if c.Groups[i].Hosts[j].Alias == alias {
-				c.Groups[i].Hosts = append(c.Groups[i].Hosts[:j], c.Groups[i].Hosts[j+1:]...)
-				return true
-			}
+	groupIdx, hostIdx := c.findHostIndices(alias)
+	if groupIdx < 0 {
+		return false
+	}
+	c.Groups[groupIdx].Hosts = append(c.Groups[groupIdx].Hosts[:hostIdx], c.Groups[groupIdx].Hosts[hostIdx+1:]...)
+	return true
+}
+
+// UpdateHost updates an existing host by alias.
+func (c *Config) UpdateHost(oldAlias, domain, ip, newAlias, groupName string) error {
+	// Find the host
+	foundGroup, foundHost := c.findHostIndices(oldAlias)
+	if foundGroup < 0 {
+		return fmt.Errorf("alias not found: %s", oldAlias)
+	}
+
+	// Check for duplicate alias if alias is changing
+	if oldAlias != newAlias {
+		if existing, _ := c.FindHostByAlias(newAlias); existing != nil {
+			return fmt.Errorf("alias already exists: %s", newAlias)
 		}
 	}
-	return false
+
+	// Get current enabled state
+	enabled := c.Groups[foundGroup].Hosts[foundHost].Enabled
+
+	// If group is changing, move to new group
+	if c.Groups[foundGroup].Name != groupName {
+		// Remove from old group
+		c.Groups[foundGroup].Hosts = append(c.Groups[foundGroup].Hosts[:foundHost], c.Groups[foundGroup].Hosts[foundHost+1:]...)
+
+		// Add to new group
+		host := Host{
+			Domain:  domain,
+			IP:      ip,
+			Alias:   newAlias,
+			Enabled: enabled,
+		}
+
+		// Find or create target group
+		found := false
+		for i := range c.Groups {
+			if c.Groups[i].Name == groupName {
+				c.Groups[i].Hosts = append(c.Groups[i].Hosts, host)
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.Groups = append(c.Groups, Group{
+				Name:  groupName,
+				Hosts: []Host{host},
+			})
+		}
+	} else {
+		// Update in place
+		c.Groups[foundGroup].Hosts[foundHost].Domain = domain
+		c.Groups[foundGroup].Hosts[foundHost].IP = ip
+		c.Groups[foundGroup].Hosts[foundHost].Alias = newAlias
+	}
+
+	return nil
 }
 
 // ApplyPreset applies a preset to the configuration.
@@ -387,6 +481,35 @@ func (c *Config) GetPresets() []Preset {
 	return c.Presets
 }
 
+// Clone creates a deep copy of the configuration.
+func (c *Config) Clone() *Config {
+	clone := &Config{
+		Settings: c.Settings,
+		Groups:   make([]Group, len(c.Groups)),
+		Presets:  make([]Preset, len(c.Presets)),
+	}
+
+	for i, g := range c.Groups {
+		clone.Groups[i] = Group{
+			Name:  g.Name,
+			Hosts: make([]Host, len(g.Hosts)),
+		}
+		copy(clone.Groups[i].Hosts, g.Hosts)
+	}
+
+	for i, p := range c.Presets {
+		clone.Presets[i] = Preset{
+			Name:    p.Name,
+			Enable:  make([]string, len(p.Enable)),
+			Disable: make([]string, len(p.Disable)),
+		}
+		copy(clone.Presets[i].Enable, p.Enable)
+		copy(clone.Presets[i].Disable, p.Disable)
+	}
+
+	return clone
+}
+
 // EnsureDefaultGroup ensures at least one group exists, creating "default" if needed.
 func (c *Config) EnsureDefaultGroup() {
 	if len(c.Groups) == 0 {
@@ -412,7 +535,7 @@ func (m *Manager) Save() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// #nosec G306 -- config file should be world-readable
+	// #nosec G306 - Config file permissions are intentionally 0644
 	if err := os.WriteFile(m.path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
@@ -423,7 +546,7 @@ func (m *Manager) Save() error {
 // CreateDefault creates a default configuration file.
 func CreateDefault(path string) error {
 	dir := filepath.Dir(path)
-	// #nosec G301 -- config directory should be world-readable
+	// #nosec G301 - Config directory permissions are intentionally 0755
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -465,7 +588,7 @@ func CreateDefault(path string) error {
 		return fmt.Errorf("failed to marshal default config: %w", err)
 	}
 
-	// #nosec G306 -- config file should be world-readable
+	// #nosec G306 - Config file permissions are intentionally 0644
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write default config: %w", err)
 	}

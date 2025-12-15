@@ -137,6 +137,6 @@ func (f *DNSFlusher) flushLinux(method FlushMethod) error {
 }
 
 func runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(name, args...) // #nosec G204 - Commands are hardcoded DNS flush utilities, not user input
 	return cmd.Run()
 }

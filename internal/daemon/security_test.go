@@ -68,7 +68,7 @@ func TestRateLimiter_Cleanup(t *testing.T) {
 		rl.Allow(pid)
 	}
 
-	assert.Len(t, rl.requests, 5)
+	assert.Len(t, rl.buckets, 5)
 
 	// Wait for expiration
 	time.Sleep(15 * time.Millisecond)
@@ -76,7 +76,7 @@ func TestRateLimiter_Cleanup(t *testing.T) {
 	// Cleanup
 	rl.Cleanup()
 
-	assert.Empty(t, rl.requests)
+	assert.Empty(t, rl.buckets)
 }
 
 func TestAuditLogger_Log(t *testing.T) {

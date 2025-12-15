@@ -29,14 +29,6 @@ func New(socketPath string) *Client {
 	}
 }
 
-// NewWithTimeout creates a new client with a custom timeout.
-func NewWithTimeout(socketPath string, timeout time.Duration) *Client {
-	return &Client{
-		socketPath: socketPath,
-		timeout:    timeout,
-	}
-}
-
 // Connect establishes a connection to the daemon.
 func (c *Client) Connect() error {
 	c.mu.Lock()
@@ -434,15 +426,4 @@ func (c *Client) ListPresets() ([]protocol.PresetInfo, error) {
 		return nil, err
 	}
 	return data.Presets, nil
-}
-
-// IsConnected checks if the daemon is reachable.
-func IsConnected(socketPath string) bool {
-	client := New(socketPath)
-	if err := client.Connect(); err != nil {
-		return false
-	}
-	defer client.Close()
-
-	return client.Ping() == nil
 }

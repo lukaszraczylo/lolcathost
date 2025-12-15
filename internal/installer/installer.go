@@ -210,14 +210,14 @@ func (i *Installer) createGroup() error {
 
 func (i *Installer) createGroupDarwin() error {
 	// Check if group exists
-	if _, err := exec.Command("dscl", ".", "-read", "/Groups/"+GroupName).Output(); err == nil {
+	if _, err := exec.Command("dscl", ".", "-read", "/Groups/"+GroupName).Output(); err == nil { // #nosec G204 - Commands use hardcoded safe values
 		i.log("  Group '%s' already exists", GroupName)
 		return nil
 	}
 
 	i.log("  Creating group '%s' (GID %d)...", GroupName, GroupGID)
 
-	// Create group
+	// Create group - commands are hardcoded with constant GroupName
 	cmds := [][]string{
 		{"dscl", ".", "-create", "/Groups/" + GroupName},
 		{"dscl", ".", "-create", "/Groups/" + GroupName, "PrimaryGroupID", strconv.Itoa(GroupGID)},
@@ -225,7 +225,7 @@ func (i *Installer) createGroupDarwin() error {
 	}
 
 	for _, args := range cmds {
-		// #nosec G204 -- args are hardcoded dscl commands with the constant GroupName
+		// #nosec G204 - Commands use hardcoded safe values
 		if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
 			return fmt.Errorf("command %v failed: %w", args, err)
 		}
@@ -236,14 +236,14 @@ func (i *Installer) createGroupDarwin() error {
 
 func (i *Installer) createGroupLinux() error {
 	// Check if group exists
-	if _, err := exec.Command("getent", "group", GroupName).Output(); err == nil {
+	if _, err := exec.Command("getent", "group", GroupName).Output(); err == nil { // #nosec G204 - GroupName is a constant
 		i.log("  Group '%s' already exists", GroupName)
 		return nil
 	}
 
 	i.log("  Creating group '%s'...", GroupName)
 
-	if err := exec.Command("groupadd", "-r", GroupName).Run(); err != nil {
+	if err := exec.Command("groupadd", "-r", GroupName).Run(); err != nil { // #nosec G204 - GroupName is a constant
 		return fmt.Errorf("groupadd failed: %w", err)
 	}
 
@@ -279,7 +279,7 @@ func (i *Installer) addCurrentUserToGroup() error {
 
 func (i *Installer) addUserToGroupDarwin(username string) error {
 	// Check if user is already in group
-	output, err := exec.Command("dscl", ".", "-read", "/Groups/"+GroupName, "GroupMembership").Output()
+	output, err := exec.Command("dscl", ".", "-read", "/Groups/"+GroupName, "GroupMembership").Output() // #nosec G204 - GroupName is a constant
 	if err == nil && strings.Contains(string(output), username) {
 		i.log("  User '%s' already in group '%s'", username, GroupName)
 		return nil
@@ -287,7 +287,7 @@ func (i *Installer) addUserToGroupDarwin(username string) error {
 
 	i.log("  Adding user '%s' to group '%s'...", username, GroupName)
 
-	if err := exec.Command("dscl", ".", "-append", "/Groups/"+GroupName, "GroupMembership", username).Run(); err != nil {
+	if err := exec.Command("dscl", ".", "-append", "/Groups/"+GroupName, "GroupMembership", username).Run(); err != nil { // #nosec G204 - GroupName is a constant, username from SUDO_USER env
 		return fmt.Errorf("failed to add user to group: %w", err)
 	}
 
@@ -296,7 +296,7 @@ func (i *Installer) addUserToGroupDarwin(username string) error {
 
 func (i *Installer) addUserToGroupLinux(username string) error {
 	// Check if user is already in group
-	output, err := exec.Command("id", "-nG", username).Output()
+	output, err := exec.Command("id", "-nG", username).Output() // #nosec G204 - username from SUDO_USER env or current user
 	if err == nil && strings.Contains(string(output), GroupName) {
 		i.log("  User '%s' already in group '%s'", username, GroupName)
 		return nil
@@ -304,7 +304,7 @@ func (i *Installer) addUserToGroupLinux(username string) error {
 
 	i.log("  Adding user '%s' to group '%s'...", username, GroupName)
 
-	if err := exec.Command("usermod", "-aG", GroupName, username).Run(); err != nil {
+	if err := exec.Command("usermod", "-aG", GroupName, username).Run(); err != nil { // #nosec G204 - GroupName is a constant, username from SUDO_USER env
 		return fmt.Errorf("failed to add user to group: %w", err)
 	}
 
@@ -316,7 +316,7 @@ func (i *Installer) createDirectories() error {
 
 	for _, dir := range dirs {
 		i.log("  Creating directory '%s'...", dir)
-		// #nosec G301 -- system directories should be world-readable
+		// #nosec G301 - System directories are intentionally 0755
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
 		}
@@ -342,7 +342,7 @@ func (i *Installer) installLaunchDaemon() error {
 
 	// Unload if already loaded (do this before writing plist)
 	i.log("  Stopping existing daemon if running...")
-	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
+	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run() // #nosec G204 - Hardcoded service name
 
 	// Give launchd time to fully unload the service
 	time.Sleep(500 * time.Millisecond)
@@ -351,21 +351,20 @@ func (i *Installer) installLaunchDaemon() error {
 	_ = os.Remove(plistPath)
 
 	i.log("  Writing LaunchDaemon plist...")
-	// #nosec G306 -- plist files are world-readable by convention
+	// #nosec G306 - Plist file permissions are intentionally 0644
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("failed to write plist: %w", err)
 	}
 
 	// Bootstrap the daemon
 	i.log("  Starting daemon...")
-	// #nosec G204 -- plistPath is constructed from constant LaunchDaemonDir
-	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath)
+	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath) // #nosec G204 - plistPath is constructed from constants
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Exit code 5 means "service already loaded" - try kickstart instead
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 5 {
 			i.log("  Service already registered, restarting...")
-			if err := exec.Command("launchctl", "kickstart", "-k", "system/com.lolcathost.daemon").Run(); err != nil {
+			if err := exec.Command("launchctl", "kickstart", "-k", "system/com.lolcathost.daemon").Run(); err != nil { // #nosec G204 - Hardcoded service name
 				return fmt.Errorf("failed to restart daemon: %w", err)
 			}
 			return nil
@@ -380,7 +379,7 @@ func (i *Installer) uninstallLaunchDaemon() {
 	plistPath := filepath.Join(LaunchDaemonDir, "com.lolcathost.daemon.plist")
 
 	i.log("  Stopping daemon...")
-	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run()
+	_ = exec.Command("launchctl", "bootout", "system/com.lolcathost.daemon").Run() // #nosec G204 - Hardcoded service name
 
 	i.log("  Removing LaunchDaemon plist...")
 	_ = os.Remove(plistPath)
@@ -391,20 +390,20 @@ func (i *Installer) installSystemdService() error {
 	unitContent := fmt.Sprintf(SystemdUnit, i.binaryPath)
 
 	i.log("  Writing systemd unit...")
-	// #nosec G306 -- systemd unit files are world-readable by convention
+	// #nosec G306 - Unit file permissions are intentionally 0644
 	if err := os.WriteFile(unitPath, []byte(unitContent), 0644); err != nil {
 		return fmt.Errorf("failed to write unit file: %w", err)
 	}
 
 	// Reload systemd
 	i.log("  Reloading systemd...")
-	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil { // #nosec G204 - Hardcoded systemctl command
 		return fmt.Errorf("failed to reload systemd: %w", err)
 	}
 
 	// Enable and start the service
 	i.log("  Enabling and starting service...")
-	if err := exec.Command("systemctl", "enable", "--now", "lolcathost.service").Run(); err != nil {
+	if err := exec.Command("systemctl", "enable", "--now", "lolcathost.service").Run(); err != nil { // #nosec G204 - Hardcoded service name
 		return fmt.Errorf("failed to enable service: %w", err)
 	}
 
@@ -413,12 +412,12 @@ func (i *Installer) installSystemdService() error {
 
 func (i *Installer) uninstallSystemdService() {
 	i.log("  Stopping and disabling service...")
-	_ = exec.Command("systemctl", "disable", "--now", "lolcathost.service").Run()
+	_ = exec.Command("systemctl", "disable", "--now", "lolcathost.service").Run() // #nosec G204 - Hardcoded service name
 
 	i.log("  Removing systemd unit...")
 	_ = os.Remove(filepath.Join(SystemdDir, "lolcathost.service"))
 
-	_ = exec.Command("systemctl", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run() // #nosec G204 - Hardcoded systemctl command
 }
 
 func (i *Installer) createDefaultConfig() error {
@@ -435,7 +434,7 @@ func (i *Installer) createDefaultConfig() error {
 
 	// Create config directory
 	configDir := filepath.Dir(configPath)
-	// #nosec G301 -- config directory should be world-readable
+	// #nosec G301 - Config directory permissions are intentionally 0755
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}

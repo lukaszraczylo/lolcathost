@@ -92,11 +92,6 @@ func (d *Daemon) Run() error {
 	return d.shutdown()
 }
 
-// Stop signals the daemon to stop.
-func (d *Daemon) Stop() {
-	close(d.stopCh)
-}
-
 func (d *Daemon) shutdown() error {
 	close(d.cleanupCh)
 	d.config.Stop()
