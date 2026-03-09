@@ -1,6 +1,6 @@
 module github.com/lukaszraczylo/lolcathost
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
