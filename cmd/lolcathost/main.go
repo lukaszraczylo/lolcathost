@@ -16,6 +16,7 @@ import (
 	"github.com/lukaszraczylo/lolcathost/internal/protocol"
 	"github.com/lukaszraczylo/lolcathost/internal/tui"
 	"github.com/lukaszraczylo/lolcathost/internal/version"
+	telemetry "github.com/lukaszraczylo/oss-telemetry"
 )
 
 // version is set at compile time via ldflags
@@ -27,6 +28,8 @@ const (
 )
 
 func main() {
+	telemetry.Send("lolcathost", appVersion)
+
 	// Flags
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (called by LaunchDaemon/systemd)")
 	installFlag := flag.Bool("install", false, "Install the daemon service (requires sudo)")
