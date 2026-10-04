@@ -4,7 +4,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Colors - matching kportal style, optimized for dark terminals

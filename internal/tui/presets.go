@@ -4,8 +4,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/lolcathost/internal/protocol"
 )
 
@@ -108,7 +108,7 @@ func (p *PresetPicker) SetSize(width, height int) {
 
 	inputWidth := min(60, width-10)
 	for i := range p.fields {
-		p.fields[i].Width = inputWidth
+		p.fields[i].SetWidth(inputWidth)
 	}
 }
 
@@ -223,7 +223,7 @@ func (p *PresetPicker) CancelForm() {
 }
 
 // Update handles input events for form mode.
-func (p *PresetPicker) Update(msg tea.KeyMsg) tea.Cmd {
+func (p *PresetPicker) Update(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "tab", "down":
 		p.nextField()

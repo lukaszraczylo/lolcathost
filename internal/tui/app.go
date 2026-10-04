@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/lukaszraczylo/lolcathost/internal/client"
 	"github.com/lukaszraczylo/lolcathost/internal/config"
@@ -143,7 +143,7 @@ func NewModel(socketPath string) *Model {
 	searchInput := textinput.New()
 	searchInput.Placeholder = "Search..."
 	searchInput.CharLimit = 100
-	searchInput.Width = 50
+	searchInput.SetWidth(50)
 
 	return &Model{
 		client:       client.New(socketPath),
@@ -161,7 +161,6 @@ func NewModel(socketPath string) *Model {
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.connect(),
-		tea.SetWindowTitle("lolcathost"),
 		m.tick(),
 		m.checkForUpdate(),
 	)
@@ -330,9 +329,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if searchWidth > 60 {
 			searchWidth = 60
 		}
-		m.searchInput.Width = searchWidth
+		m.searchInput.SetWidth(searchWidth)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		cmd := m.handleKey(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
@@ -505,7 +504,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Global keys
 	switch msg.String() {
 	case "ctrl+c":
@@ -535,7 +534,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleListKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleListKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "q":
 		return tea.Quit
@@ -549,7 +548,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) tea.Cmd {
 		m.list.MoveUp()
 	case "down", "j":
 		m.list.MoveDown()
-	case " ", "enter":
+	case "space", "enter":
 		return m.toggleSelected()
 	case "n":
 		m.mode = ViewForm
@@ -587,7 +586,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleFormKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleFormKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.mode = ViewList
@@ -615,7 +614,7 @@ func (m *Model) handleFormKey(msg tea.KeyMsg) tea.Cmd {
 	return m.form.Update(msg)
 }
 
-func (m *Model) handlePresetKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handlePresetKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Handle based on preset picker mode
 	switch m.presetPicker.Mode() {
 	case PresetModeSelect:
@@ -630,7 +629,7 @@ func (m *Model) handlePresetKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handlePresetSelectKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handlePresetSelectKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "q":
 		m.mode = ViewList
@@ -652,7 +651,7 @@ func (m *Model) handlePresetSelectKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handlePresetFormKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handlePresetFormKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.presetPicker.CancelForm()
@@ -690,7 +689,7 @@ func (m *Model) handlePresetFormKey(msg tea.KeyMsg) tea.Cmd {
 	return m.presetPicker.Update(msg)
 }
 
-func (m *Model) handlePresetPickerKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handlePresetPickerKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.presetPicker.ClosePicker()
@@ -700,13 +699,13 @@ func (m *Model) handlePresetPickerKey(msg tea.KeyMsg) tea.Cmd {
 		m.presetPicker.PickerMoveUp()
 	case "down", "j":
 		m.presetPicker.PickerMoveDown()
-	case " ":
+	case "space":
 		m.presetPicker.TogglePickerSelection()
 	}
 	return nil
 }
 
-func (m *Model) handlePresetDeleteKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handlePresetDeleteKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
 		if preset := m.presetPicker.Selected(); preset != "" {
@@ -719,7 +718,7 @@ func (m *Model) handlePresetDeleteKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleGroupKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleGroupKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Handle based on group picker mode
 	switch m.groupPicker.Mode() {
 	case GroupModeSelect:
@@ -732,7 +731,7 @@ func (m *Model) handleGroupKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleGroupSelectKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleGroupSelectKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "q":
 		m.mode = ViewList
@@ -750,7 +749,7 @@ func (m *Model) handleGroupSelectKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleGroupFormKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleGroupFormKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.groupPicker.CancelForm()
@@ -770,7 +769,7 @@ func (m *Model) handleGroupFormKey(msg tea.KeyMsg) tea.Cmd {
 	return m.groupPicker.Update(msg)
 }
 
-func (m *Model) handleGroupDeleteKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleGroupDeleteKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
 		if group := m.groupPicker.Selected(); group != "" {
@@ -783,7 +782,7 @@ func (m *Model) handleGroupDeleteKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleBackupKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleBackupKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch m.backupPicker.Mode() {
 	case BackupModeSelect:
 		return m.handleBackupSelectKey(msg)
@@ -793,7 +792,7 @@ func (m *Model) handleBackupKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleBackupSelectKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleBackupSelectKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "q":
 		m.mode = ViewList
@@ -821,7 +820,7 @@ func (m *Model) handleBackupSelectKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleBackupRestoreKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleBackupRestoreKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
 		if backup := m.backupPicker.Selected(); backup != "" {
@@ -834,7 +833,7 @@ func (m *Model) handleBackupRestoreKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleHelpKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "q", "?":
 		m.mode = ViewList
@@ -842,7 +841,7 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleSearchKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.mode = ViewList
@@ -860,7 +859,7 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) handleConfirmDeleteKey(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleConfirmDeleteKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "y", "Y":
 		alias := m.pendingDeleteAlias
@@ -900,7 +899,14 @@ func (m *Model) setSuccess(msg string) {
 }
 
 // View renders the UI.
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	v.WindowTitle = "lolcathost"
+	return v
+}
+
+func (m *Model) render() string {
 	var sb strings.Builder
 
 	// Title with version
@@ -1142,7 +1148,7 @@ func RunWithVersion(socketPath, version, githubOwner, githubRepo string) error {
 	m.version = version
 	m.githubOwner = githubOwner
 	m.githubRepo = githubRepo
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 
 	_, err := p.Run()
 	return err

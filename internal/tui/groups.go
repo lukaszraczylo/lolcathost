@@ -4,8 +4,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 // GroupMode represents the group view mode.
@@ -53,7 +53,7 @@ func (g *GroupPicker) SetGroups(groups []string) {
 func (g *GroupPicker) SetSize(width, height int) {
 	g.width = width
 	g.height = height
-	g.input.Width = min(50, width-10)
+	g.input.SetWidth(min(50, width-10))
 }
 
 // MoveUp moves the cursor up.
@@ -126,7 +126,7 @@ func (g *GroupPicker) CancelForm() {
 }
 
 // Update handles input events for form mode.
-func (g *GroupPicker) Update(msg tea.KeyMsg) tea.Cmd {
+func (g *GroupPicker) Update(msg tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
 	g.input, cmd = g.input.Update(msg)
 	return cmd

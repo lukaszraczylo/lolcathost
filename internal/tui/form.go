@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/lukaszraczylo/lolcathost/internal/config"
 )
 
@@ -127,14 +127,14 @@ func (f *Form) SetSize(width, height int) {
 
 	inputWidth := min(50, width-10)
 	for i := range f.fields {
-		f.fields[i].Width = inputWidth
+		f.fields[i].SetWidth(inputWidth)
 	}
 }
 
 // Update handles input events.
 func (f *Form) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Handle group dropdown navigation
 		if f.focus == FieldGroup {
 			switch msg.String() {
