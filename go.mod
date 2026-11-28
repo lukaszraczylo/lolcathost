@@ -4,7 +4,7 @@ go 1.26.7
 
 require (
 	charm.land/bubbles/v2 v2.2.2
-	charm.land/bubbletea/v2 v2.1.2
+	charm.land/bubbletea/v2 v2.1.3
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/lukaszraczylo/oss-telemetry v0.2.5
